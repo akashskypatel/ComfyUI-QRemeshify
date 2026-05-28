@@ -1,5 +1,7 @@
 """Dedicated sharp-feature generation node."""
 
+from pathlib import Path
+
 from .artifacts import (
     MESH_ARTIFACT_TYPE,
     SHARP_ARTIFACT_TYPE,
@@ -10,7 +12,7 @@ from .artifacts import (
 )
 from .blender_backend import bpy_available
 from .constants import NODE_CATEGORY
-from .mesh_io import prepare_mesh_workspace
+from .mesh_to_obj_node import QRemeshifyMeshToOBJ
 from .sharp_features import generate_sharp_features
 
 
@@ -23,7 +25,7 @@ class QRemeshifyGenerateSharpFeatures:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "input_mesh": ("STRING", {"default": ""}),
+                "input_mesh": ("STRING,FILE_3D,MESH", {"default": ""}),
                 "backend": (["AUTO", "BPY", "LIBIGL", "TRIMESH"], {"default": "AUTO"}),
                 "sharp_angle": ("FLOAT", {"default": 35.0, "min": 0.0, "max": 180.0, "step": 0.1}),
             },
@@ -38,15 +40,22 @@ class QRemeshifyGenerateSharpFeatures:
     FUNCTION = "generate"
 
     def generate(self, input_mesh, backend, sharp_angle, output_dir="", output_prefix=""):
-        workspace_dir, source_mesh = prepare_mesh_workspace(input_mesh, output_dir, prefix="qremeshify_sharp_")
-        stem = output_prefix.strip() or source_mesh.stem
-        normalized_obj_path = workspace_dir / f"{stem}.obj"
-        sharp_output_path = workspace_dir / f"{stem}.sharp"
         resolved_backend = backend
         if backend == "AUTO":
             resolved_backend = "BPY" if bpy_available() else "LIBIGL"
+        normalization_backend = "BPY" if resolved_backend == "BPY" else "TRIMESH"
+        normalized_obj_path, workspace_dir, normalized_mesh_artifact = QRemeshifyMeshToOBJ().convert(
+            input_mesh,
+            backend=normalization_backend,
+            output_dir=output_dir,
+            output_prefix=output_prefix,
+        )
+        normalized_obj_path = Path(normalized_obj_path)
+        workspace_dir = Path(workspace_dir)
+        stem = normalized_mesh_artifact.label or output_prefix.strip() or "mesh"
+        sharp_output_path = Path(workspace_dir) / f"{stem}.sharp"
         sharp_path = generate_sharp_features(
-            source_mesh,
+            normalized_obj_path,
             normalized_obj_path,
             sharp_angle,
             sharp_output_path,
@@ -59,7 +68,7 @@ class QRemeshifyGenerateSharpFeatures:
             vertices=vertices,
             faces=faces,
             workspace_dir=str(workspace_dir),
-            source_path=str(source_mesh),
+            source_path=normalized_mesh_artifact.source_path,
             backend=resolved_backend,
             label=stem,
         )

@@ -13,14 +13,16 @@ This project is based on [QRemeshify](https://github.com/ksami/QRemeshify), whic
 
 # Included Nodes
 ## `QRemeshify Mesh To OBJ`
-Converts a mesh path into an OBJ file for downstream QRemeshify nodes.
+Converts a mesh input into an OBJ file for downstream QRemeshify nodes.
 
 Behavior:
 - if the input is already `.obj`, it is copied into the node workspace
+- `FILE_3D` inputs are saved into the node workspace first
+- `MESH` inputs are written directly as a triangle OBJ
 - otherwise the mesh is normalized into a triangle OBJ through the selected backend
 
 Inputs:
-- `input_mesh`: path to the source mesh
+- `input_mesh`: `STRING`, `FILE_3D`, or `MESH`
 - `backend`: `AUTO`, `BPY`, or `TRIMESH`
 - `output_dir` optional
 - `output_prefix` optional
@@ -37,7 +39,7 @@ Preprocesses a mesh into:
 - a workspace directory path
 
 Inputs:
-- `input_mesh`: path to the source mesh
+- `input_mesh`: `STRING`, `FILE_3D`, or `MESH`
 - `backend`: `AUTO`, `BPY`, `LIBIGL`, or `TRIMESH`
 - `sharp_angle`: dihedral angle threshold in degrees
 - `output_dir` optional
@@ -74,16 +76,23 @@ Outputs:
 - `traced_mesh_artifact`
 
 # Recommended ComfyUI Workflow
-Use either of these preprocessing paths:
+Preferred workflow:
 
-1. `QRemeshify Mesh To OBJ` -> `QRemeshify OBJ`
-2. `QRemeshify Generate Sharp Features` -> `QRemeshify OBJ`
+1. `Load3D.model_3d` or another mesh source
+2. `QRemeshify Generate Sharp Features`
+3. `QRemeshify OBJ`
 
 For the sharp-feature workflow, wire them like this:
-- `mesh_obj` -> `input_obj`
-- `sharp_features_path` -> `sharp_features_path`
+- `mesh_artifact` -> `mesh_artifact`
+- `sharp_artifact` -> `sharp_artifact`
 
-This is the preferred workflow because the sharp-feature node writes a normalized triangle OBJ, and the `.sharp` file indices must match the exact OBJ consumed by the backend.
+This is the preferred workflow because the sharp-feature node writes the normalized triangle OBJ internally, and the `.sharp` file indices must match the exact OBJ consumed by the backend.
+
+Optional utility workflow:
+
+1. `QRemeshify Mesh To OBJ` -> `QRemeshify OBJ`
+
+`QRemeshify Mesh To OBJ` is now mainly useful as a utility/debug node when you want the normalized OBJ by itself, or when you want to inspect the exact mesh artifact before sharp generation or remeshing.
 
 If you skip the first node, `QRemeshify OBJ` can still auto-generate sharp features when:
 - `detect_sharp=True`
@@ -157,13 +166,14 @@ pip install -r requirements.txt
 The native backend currently consumes OBJ files.
 
 Current practical support is:
-- `QRemeshify Mesh To OBJ`: converts common mesh formats into OBJ through `bpy` or `trimesh`
+- `QRemeshify Mesh To OBJ`: accepts `STRING`, `FILE_3D`, or `MESH`, then converts to OBJ through direct write, `bpy`, or `trimesh`
 - `QRemeshify OBJ`: OBJ input only
-- `QRemeshify Generate Sharp Features`: any mesh format that the selected backend can import, then converted to normalized triangle OBJ output
+- `QRemeshify Generate Sharp Features`: accepts `STRING`, `FILE_3D`, or `MESH`, then converts to normalized triangle OBJ output before generating `.sharp`
 
 That means a common pattern is:
-- load `STL`, `PLY`, or another supported format in `QRemeshify Mesh To OBJ` or `QRemeshify Generate Sharp Features`
-- pass the generated `mesh_obj` to `QRemeshify OBJ`
+- load `GLB`, `GLTF`, `STL`, `PLY`, `OBJ`, or another supported format in `Load3D` or another upstream node
+- pass `model_3d` or `MESH` directly into `QRemeshify Generate Sharp Features`
+- pass the returned artifacts into `QRemeshify OBJ`
 
 # Current Limitations
 - Symmetry preprocessing/postprocessing is implemented only on the `bpy` path inside `QRemeshify OBJ`
@@ -185,9 +195,9 @@ That means a common pattern is:
 # Pipeline
 ```mermaid
 flowchart TD
-    A[Input mesh path] --> B[QRemeshify Generate Sharp Features]
-    B --> C[Normalized triangle OBJ]
-    B --> D[.sharp file]
+    A[Load3D model_3d or MESH] --> B[QRemeshify Generate Sharp Features]
+    B --> C[mesh_artifact]
+    B --> D[sharp_artifact]
     C --> E[QRemeshify OBJ]
     D --> E
     E --> F[QuadWild preprocess and field]
