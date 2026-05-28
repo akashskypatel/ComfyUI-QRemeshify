@@ -12,6 +12,22 @@ This project is based on [QRemeshify](https://github.com/ksami/QRemeshify), whic
 - Reuses the original QRemeshify config files for advanced solver settings
 
 # Included Nodes
+## `QRemeshify Mesh To OBJ`
+Converts a mesh path into an OBJ file for downstream QRemeshify nodes.
+
+Behavior:
+- if the input is already `.obj`, it is copied into the node workspace
+- otherwise the mesh is loaded through `trimesh` and written as a triangle OBJ
+
+Inputs:
+- `input_mesh`: path to the source mesh
+- `output_dir` optional
+- `output_prefix` optional
+
+Outputs:
+- `output_obj`
+- `workspace_dir`
+
 ## `QRemeshify Generate Sharp Features`
 Preprocesses a mesh into:
 - a normalized triangle OBJ
@@ -50,12 +66,12 @@ Outputs:
 - `traced_obj`
 
 # Recommended ComfyUI Workflow
-Use two nodes in sequence:
+Use either of these preprocessing paths:
 
-1. `QRemeshify Generate Sharp Features`
-2. `QRemeshify OBJ`
+1. `QRemeshify Mesh To OBJ` -> `QRemeshify OBJ`
+2. `QRemeshify Generate Sharp Features` -> `QRemeshify OBJ`
 
-Wire them like this:
+For the sharp-feature workflow, wire them like this:
 - `mesh_obj` -> `input_obj`
 - `sharp_features_path` -> `sharp_features_path`
 
@@ -96,11 +112,12 @@ pip install -r requirements.txt
 The native backend currently consumes OBJ files.
 
 Current practical support is:
+- `QRemeshify Mesh To OBJ`: converts common mesh formats readable by `trimesh` into OBJ
 - `QRemeshify OBJ`: OBJ input only
 - `QRemeshify Generate Sharp Features`: any mesh format that your installed backend loader can read through `trimesh`, then converted to normalized triangle OBJ output
 
 That means a common pattern is:
-- load `STL`, `PLY`, or another supported format in `QRemeshify Generate Sharp Features`
+- load `STL`, `PLY`, or another supported format in `QRemeshify Mesh To OBJ` or `QRemeshify Generate Sharp Features`
 - pass the generated `mesh_obj` to `QRemeshify OBJ`
 
 # Current Limitations
