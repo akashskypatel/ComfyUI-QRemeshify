@@ -9,6 +9,8 @@
 - [x] Add optional `vertices` / `faces` payloads to `QREMESHIFY_MESH` artifacts while preserving current path-backed behavior.
 - [x] Add optional parsed feature-row payloads to `QREMESHIFY_SHARP` artifacts while preserving current path-backed behavior.
 - [x] Populate those in-memory payloads in `QRemeshify Mesh To OBJ` and `QRemeshify Generate Sharp Features`.
+- [x] Make `QRemeshify OBJ` prefer in-memory artifact payloads and only materialize OBJ / `.sharp` files at the native backend boundary.
+- [x] Parse final/remeshed/traced OBJ outputs back into in-memory mesh payloads for returned mesh artifacts.
 - [x] Remove the remaining non-runtime `QRemeshify` reference artifacts.
 
 ## Testing And Validation
@@ -21,16 +23,12 @@
 ## Remaining Audit / Hardening
 - [ ] Audit Blender-backed preprocessing against addon edge cases like modifiers, shapekeys, and multi-object imports.
 
-## In-Memory Contract Expansion
-- [ ] Medium risk: make `QRemeshify OBJ` prefer in-memory artifact payloads and only materialize OBJ / `.sharp` files at the native backend boundary.
-- [ ] Medium risk: optionally parse final/remeshed/traced OBJ outputs back into in-memory mesh payloads for returned mesh artifacts.
-- [ ] Higher risk: evaluate whether `.rosy` / trace-stage contracts should remain file-backed permanently or be abstracted behind internal temporary artifacts only.
-
 ## Documentation
 - [ ] Add a troubleshooting section for `bpy`, DLL loading, and backend failures.
 
 ## Future Backlog
 - [ ] Optional future: expose mirrored/full-mesh variants for intermediate outputs only if later debugging needs justify it. Current decision is to keep half-mesh intermediates authoritative.
 - [ ] Optional future: add a dedicated debug/intermediate-output helper workflow or node if real debugging usage shows the current returned file paths are insufficient.
+- [ ] Optional future: evaluate whether `.rosy` / trace-stage contracts should remain file-backed permanently or be abstracted behind internal temporary artifacts only.
 - [ ] Add [NeuroCross](https://github.com/QiujieDong/NeurCross) as an additional quad mesh generation backend.
 - [ ] Add a `setup.py`-driven build process for `third_party/quadwild`, and later extend that same cross-platform build path to NeuroCross.

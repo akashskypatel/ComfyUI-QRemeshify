@@ -21,6 +21,15 @@ def parse_float_list(value: str, expected_count: int, label: str) -> list[float]
         raise QRemeshifyError(f"{label} contains a non-numeric value") from exc
 
 
+def prepare_output_workspace(output_dir: str, prefix: str = "qremeshify_") -> Path:
+    if output_dir.strip():
+        workspace_dir = Path(output_dir).expanduser().resolve()
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        workspace_dir = Path(tempfile.mkdtemp(prefix=prefix))
+    return workspace_dir
+
+
 def prepare_workspace(input_obj: str, output_dir: str) -> tuple[Path, Path]:
     source_path = Path(input_obj).expanduser().resolve()
     if not source_path.exists():
@@ -28,12 +37,7 @@ def prepare_workspace(input_obj: str, output_dir: str) -> tuple[Path, Path]:
     if source_path.suffix.lower() != ".obj":
         raise QRemeshifyError("Only OBJ input is supported by this node")
 
-    if output_dir.strip():
-        workspace_dir = Path(output_dir).expanduser().resolve()
-        workspace_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        workspace_dir = Path(tempfile.mkdtemp(prefix="qremeshify_"))
-
+    workspace_dir = prepare_output_workspace(output_dir, prefix="qremeshify_")
     working_obj = workspace_dir / source_path.name
     if source_path != working_obj:
         shutil.copyfile(source_path, working_obj)
@@ -45,12 +49,7 @@ def prepare_mesh_workspace(input_mesh: str, output_dir: str, prefix: str = "qrem
     if not source_path.exists():
         raise FileNotFoundError(source_path)
 
-    if output_dir.strip():
-        workspace_dir = Path(output_dir).expanduser().resolve()
-        workspace_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        workspace_dir = Path(tempfile.mkdtemp(prefix=prefix))
-
+    workspace_dir = prepare_output_workspace(output_dir, prefix=prefix)
     return workspace_dir, source_path
 
 

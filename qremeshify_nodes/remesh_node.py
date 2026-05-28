@@ -8,6 +8,9 @@ from .artifacts import (
     QRemeshifyMeshArtifact,
     QRemeshifySharpArtifact,
     build_mesh_artifact,
+    materialize_mesh_artifact,
+    materialize_sharp_artifact,
+    parse_obj_payload,
     resolve_mesh_input,
     resolve_sharp_input,
 )
@@ -15,7 +18,7 @@ from .backend import QuadwildBackend
 from .blender_backend import bpy_available, postprocess_obj_with_symmetry_with_bpy, preprocess_obj_with_symmetry_with_bpy
 from .constants import NODE_CATEGORY
 from .errors import QRemeshifyError
-from .mesh_io import parse_float_list, prepare_workspace
+from .mesh_io import parse_float_list, prepare_output_workspace, prepare_workspace
 from .sharp_features import generate_sharp_features
 
 
@@ -123,12 +126,29 @@ class QRemeshifyOBJ:
         symmetry_y=False,
         symmetry_z=False,
     ):
-        input_obj = resolve_mesh_input(input_obj, mesh_artifact)
-        sharp_features_path = resolve_sharp_input(sharp_features_path, sharp_artifact)
+        resolved_input_obj = resolve_mesh_input(input_obj, mesh_artifact)
+        resolved_sharp_path = resolve_sharp_input(sharp_features_path, sharp_artifact)
         time_limits = parse_float_list(callback_time_limit, 8, "callback_time_limit")
         gap_limits = parse_float_list(callback_gap_limit, 8, "callback_gap_limit")
 
-        workspace_dir, working_obj = prepare_workspace(input_obj, output_dir)
+        mesh_payload_available = mesh_artifact is not None and bool(mesh_artifact.vertices and mesh_artifact.faces)
+        sharp_payload_available = sharp_artifact is not None and bool(sharp_artifact.feature_rows)
+
+        if mesh_payload_available:
+            workspace_dir = prepare_output_workspace(output_dir, prefix="qremeshify_")
+            stem = mesh_artifact.label or "qremeshify_mesh"
+            working_obj = workspace_dir / f"{stem}.obj"
+            materialize_mesh_artifact(mesh_artifact, str(working_obj))
+        elif resolved_input_obj:
+            workspace_dir, working_obj = prepare_workspace(resolved_input_obj, output_dir)
+        elif mesh_artifact is not None:
+            workspace_dir = prepare_output_workspace(output_dir, prefix="qremeshify_")
+            stem = mesh_artifact.label or "qremeshify_mesh"
+            working_obj = workspace_dir / f"{stem}.obj"
+            materialize_mesh_artifact(mesh_artifact, str(working_obj))
+        else:
+            raise QRemeshifyError("QRemeshify OBJ requires either input_obj or mesh_artifact")
+
         backend = QuadwildBackend(working_obj)
 
         if use_cache and not output_dir.strip():
@@ -147,7 +167,7 @@ class QRemeshifyOBJ:
                     symmetry_y,
                     symmetry_z,
                 )
-        sharp_path = sharp_features_path.strip()
+        sharp_path = "" if sharp_payload_available else resolved_sharp_path.strip()
         if sharp_path and not Path(sharp_path).expanduser().resolve().exists():
             raise FileNotFoundError(Path(sharp_path).expanduser().resolve())
 
@@ -158,7 +178,12 @@ class QRemeshifyOBJ:
                     "Run once with use_cache=False in the same output_dir first."
                 )
         else:
-            if sharp_path:
+            if sharp_payload_available:
+                sharp_path = materialize_sharp_artifact(
+                    sharp_artifact,
+                    str(workspace_dir / f"{working_obj.stem}_artifact.sharp"),
+                )
+            elif sharp_path:
                 sharp_path = str(Path(sharp_path).expanduser().resolve())
             elif detect_sharp:
                 resolved_backend = sharp_backend
@@ -213,8 +238,13 @@ class QRemeshifyOBJ:
                 symmetry_y,
                 symmetry_z,
             )
+        final_vertices, final_faces = parse_obj_payload(str(final_path))
+        remeshed_vertices, remeshed_faces = parse_obj_payload(str(backend.remeshed_path))
+        traced_vertices, traced_faces = parse_obj_payload(str(backend.traced_path))
         output_mesh_artifact = build_mesh_artifact(
             obj_path=str(final_path),
+            vertices=final_vertices,
+            faces=final_faces,
             workspace_dir=str(workspace_dir),
             source_path=str(working_obj),
             backend="QREMESHIFY",
@@ -223,6 +253,8 @@ class QRemeshifyOBJ:
         )
         remeshed_mesh_artifact = build_mesh_artifact(
             obj_path=str(backend.remeshed_path),
+            vertices=remeshed_vertices,
+            faces=remeshed_faces,
             workspace_dir=str(workspace_dir),
             source_path=str(working_obj),
             backend="QREMESHIFY",
@@ -231,6 +263,8 @@ class QRemeshifyOBJ:
         )
         traced_mesh_artifact = build_mesh_artifact(
             obj_path=str(backend.traced_path),
+            vertices=traced_vertices,
+            faces=traced_faces,
             workspace_dir=str(workspace_dir),
             source_path=str(working_obj),
             backend="QREMESHIFY",
