@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 BACKEND_DIR = ROOT_DIR / "qremesh_backend"
-CONFIG_DIR = ROOT_DIR / "QRemeshify" / "lib" / "config"
+CONFIG_DIR = ROOT_DIR / "qremeshify_config"
 NODE_CATEGORY = "mesh/remesh"
 
 FLOW_CONFIG_FILES = {

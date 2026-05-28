@@ -9,7 +9,7 @@ This project is based on [QRemeshify](https://github.com/ksami/QRemeshify), whic
 - Produces quad-oriented remeshed OBJ output
 - Exposes a dedicated sharp-feature generation node
 - Supports `BPY`, `LIBIGL`, and `TRIMESH` backends for preprocessing and generating `.sharp` files
-- Reuses the original QRemeshify config files for advanced solver settings
+- Uses extension-owned runtime config files under `qremeshify_config` for advanced solver settings
 
 # Included Nodes
 ## `QRemeshify Mesh To OBJ`
@@ -56,6 +56,7 @@ Inputs:
 - `smooth`
 - `detect_sharp`
 - `sharp_angle`
+- `use_cache`: reuse previously generated traced intermediates and rerun only quadrangulation
 - `sharp_features_path` optional
 - `sharp_backend` optional fallback if `detect_sharp=True` and no `.sharp` file is supplied
 - advanced solver controls such as `alpha`, `ilp_method`, `flow_config`, and `satsuma_config`
@@ -82,6 +83,12 @@ If you skip the first node, `QRemeshify OBJ` can still auto-generate sharp featu
 - `detect_sharp=True`
 - `sharp_features_path` is empty
 
+Cache behavior:
+- `use_cache=True` skips preprocess, sharp generation, remesh, and trace
+- it reuses the existing `_rem_p0.obj` traced mesh from the same `output_dir`
+- this requires a prior run with `use_cache=False` in that same `output_dir`
+- `use_cache=True` requires `output_dir` to be set explicitly
+
 `AUTO` backend behavior:
 - prefers `BPY` when Blender's Python module is available
 - falls back to `LIBIGL` or `TRIMESH` when `bpy` is unavailable
@@ -97,6 +104,10 @@ Python packages:
 - `libigl`
 - `trimesh`
 - `numpy`
+
+Runtime assets bundled with this extension:
+- `qremesh_backend` for the native DLLs
+- `qremeshify_config` for solver configuration files
 
 Install the Python dependencies into ComfyUI's environment:
 
@@ -129,6 +140,7 @@ That means a common pattern is:
 # Current Limitations
 - Symmetry preprocessing/postprocessing is implemented only on the `bpy` path inside `QRemeshify OBJ`
 - When symmetry is enabled, the final output OBJ is mirrored back to full form, while intermediate remesh/traced outputs remain in the pre-mirror half-mesh form
+- Cache mode currently reuses the traced half/full mesh already present in the chosen `output_dir`; changing symmetry or source geometry while reusing cache can make results inconsistent
 - The final backend output is currently returned as OBJ path strings, not a native in-memory mesh datatype for ComfyUI
 - `QRemeshify OBJ` expects filesystem paths, not uploaded binary mesh tensors or geometry objects
 - Blender-backed preprocessing requires `bpy` to be installed in the exact Python environment ComfyUI is using

@@ -49,6 +49,7 @@ class QRemeshifyOBJ:
                 ),
             },
             "optional": {
+                "use_cache": ("BOOLEAN", {"default": False}),
                 "sharp_features_path": ("STRING", {"default": ""}),
                 "sharp_backend": (["AUTO", "BPY", "LIBIGL", "TRIMESH"], {"default": "AUTO"}),
                 "callback_time_limit": ("STRING", {"default": "3,5,10,20,30,60,90,120"}),
@@ -91,6 +92,7 @@ class QRemeshifyOBJ:
         hard_parity_constraint,
         flow_config,
         satsuma_config,
+        use_cache=False,
         sharp_features_path="",
         sharp_backend="LIBIGL",
         callback_time_limit="3,5,10,20,30,60,90,120",
@@ -104,42 +106,54 @@ class QRemeshifyOBJ:
         gap_limits = parse_float_list(callback_gap_limit, 8, "callback_gap_limit")
 
         workspace_dir, working_obj = prepare_workspace(input_obj, output_dir)
+        backend = QuadwildBackend(working_obj)
+
+        if use_cache and not output_dir.strip():
+            raise QRemeshifyError("use_cache=True requires a persistent output_dir so cached intermediates can be reused")
+
         if symmetry_x or symmetry_y or symmetry_z:
             if not bpy_available():
                 raise QRemeshifyError(
                     "Symmetry currently requires Blender's Python module 'bpy' to be available in the same environment as ComfyUI"
                 )
-            preprocess_obj_with_symmetry_with_bpy(
-                working_obj,
-                working_obj,
-                symmetry_x,
-                symmetry_y,
-                symmetry_z,
-            )
-
+            if not use_cache:
+                preprocess_obj_with_symmetry_with_bpy(
+                    working_obj,
+                    working_obj,
+                    symmetry_x,
+                    symmetry_y,
+                    symmetry_z,
+                )
         sharp_path = sharp_features_path.strip()
         if sharp_path and not Path(sharp_path).expanduser().resolve().exists():
             raise FileNotFoundError(Path(sharp_path).expanduser().resolve())
 
-        if sharp_path:
-            sharp_path = str(Path(sharp_path).expanduser().resolve())
-        elif detect_sharp:
-            resolved_backend = sharp_backend
-            if sharp_backend == "AUTO":
-                resolved_backend = "BPY" if bpy_available() else "LIBIGL"
-            sharp_path = str(
-                generate_sharp_features(
-                    working_obj,
-                    working_obj,
-                    sharp_angle,
-                    workspace_dir / f"{working_obj.stem}_generated.sharp",
-                    resolved_backend,
+        if use_cache:
+            if not backend.traced_path.exists():
+                raise QRemeshifyError(
+                    f"use_cache=True requires an existing traced mesh at {backend.traced_path}. "
+                    "Run once with use_cache=False in the same output_dir first."
                 )
-            )
+        else:
+            if sharp_path:
+                sharp_path = str(Path(sharp_path).expanduser().resolve())
+            elif detect_sharp:
+                resolved_backend = sharp_backend
+                if sharp_backend == "AUTO":
+                    resolved_backend = "BPY" if bpy_available() else "LIBIGL"
+                sharp_path = str(
+                    generate_sharp_features(
+                        working_obj,
+                        working_obj,
+                        sharp_angle,
+                        workspace_dir / f"{working_obj.stem}_generated.sharp",
+                        resolved_backend,
+                    )
+                )
 
-        backend = QuadwildBackend(working_obj)
-        backend.remesh_and_field(preprocess, sharp_path, sharp_angle)
-        backend.trace()
+            backend.remesh_and_field(preprocess, sharp_path, sharp_angle)
+            backend.trace()
+
         backend.quadrangulate(
             enable_smoothing=smooth,
             scale_fact=scale_factor,
