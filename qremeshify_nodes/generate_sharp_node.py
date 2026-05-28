@@ -1,6 +1,13 @@
 """Dedicated sharp-feature generation node."""
 
-from .artifacts import MESH_ARTIFACT_TYPE, SHARP_ARTIFACT_TYPE, build_mesh_artifact, build_sharp_artifact
+from .artifacts import (
+    MESH_ARTIFACT_TYPE,
+    SHARP_ARTIFACT_TYPE,
+    build_mesh_artifact,
+    build_sharp_artifact,
+    parse_obj_payload,
+    parse_sharp_payload,
+)
 from .blender_backend import bpy_available
 from .constants import NODE_CATEGORY
 from .mesh_io import prepare_mesh_workspace
@@ -45,8 +52,12 @@ class QRemeshifyGenerateSharpFeatures:
             sharp_output_path,
             resolved_backend,
         )
+        vertices, faces = parse_obj_payload(str(normalized_obj_path))
+        feature_rows = parse_sharp_payload(str(sharp_path))
         mesh_artifact = build_mesh_artifact(
             obj_path=str(normalized_obj_path),
+            vertices=vertices,
+            faces=faces,
             workspace_dir=str(workspace_dir),
             source_path=str(source_mesh),
             backend=resolved_backend,
@@ -54,6 +65,7 @@ class QRemeshifyGenerateSharpFeatures:
         )
         sharp_artifact = build_sharp_artifact(
             sharp_features_path=str(sharp_path),
+            feature_rows=feature_rows,
             mesh_obj_path=str(normalized_obj_path),
             workspace_dir=str(workspace_dir),
             backend=resolved_backend,

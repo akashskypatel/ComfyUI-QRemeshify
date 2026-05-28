@@ -103,6 +103,9 @@ Current behavior:
 - `QRemeshify Mesh To OBJ` returns both `output_obj` and `mesh_artifact`
 - `QRemeshify Generate Sharp Features` returns both path outputs and artifact outputs
 - `QRemeshify OBJ` accepts the legacy string inputs, and can also consume `mesh_artifact` and `sharp_artifact`
+- preprocessing artifacts can now include in-memory payloads:
+  - mesh artifacts: `vertices`, `faces`
+  - sharp artifacts: parsed feature rows
 
 The internal pipeline still operates on filesystem-backed OBJ and `.sharp` files, but nodes no longer have to communicate only through bare path strings.
 
@@ -164,7 +167,8 @@ That means a common pattern is:
 - Symmetry preprocessing/postprocessing is implemented only on the `bpy` path inside `QRemeshify OBJ`
 - When symmetry is enabled, the final output OBJ is mirrored back to full form, while intermediate remesh/traced outputs remain in the pre-mirror half-mesh form
 - Cache mode currently reuses the traced half/full mesh already present in the chosen `output_dir`; changing symmetry or source geometry while reusing cache can make results inconsistent
-- The richer artifact contract currently wraps filesystem-backed outputs; it is not yet a fully in-memory geometry buffer implementation
+- `QRemeshify OBJ` still executes against filesystem-backed OBJ and `.sharp` files at the native backend boundary
+- returned remesh-stage artifacts are still primarily path-backed; only preprocessing artifacts currently carry in-memory geometry / sharp payloads
 - `QRemeshify OBJ` expects filesystem paths, not uploaded binary mesh tensors or geometry objects
 - Blender-backed preprocessing requires `bpy` to be installed in the exact Python environment ComfyUI is using
 - Sharp-feature generation depends on the selected backend being available in the same Python environment ComfyUI is using

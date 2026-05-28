@@ -1,6 +1,6 @@
 """Mesh-to-OBJ conversion node."""
 
-from .artifacts import MESH_ARTIFACT_TYPE, build_mesh_artifact
+from .artifacts import MESH_ARTIFACT_TYPE, build_mesh_artifact, mesh_arrays_to_lists, parse_obj_payload
 from .blender_backend import normalize_mesh_to_obj_with_bpy
 from .blender_backend import bpy_available
 from .constants import NODE_CATEGORY
@@ -45,14 +45,19 @@ class QRemeshifyMeshToOBJ:
         if source_mesh.suffix.lower() == ".obj":
             if source_mesh != output_obj_path:
                 output_obj_path.write_bytes(source_mesh.read_bytes())
+            vertices, faces = parse_obj_payload(str(output_obj_path))
         elif resolved_backend == "BPY":
             normalize_mesh_to_obj_with_bpy(source_mesh, output_obj_path)
+            vertices, faces = parse_obj_payload(str(output_obj_path))
         else:
             vertices, faces = load_triangle_mesh_with_trimesh(source_mesh)
             write_triangle_obj(output_obj_path, vertices, faces)
+            vertices, faces = mesh_arrays_to_lists(vertices, faces)
 
         mesh_artifact = build_mesh_artifact(
             obj_path=str(output_obj_path),
+            vertices=vertices,
+            faces=faces,
             workspace_dir=str(workspace_dir),
             source_path=str(source_mesh),
             backend=resolved_backend,

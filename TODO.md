@@ -6,6 +6,9 @@
 - [x] Implement cache mode in `QRemeshify OBJ` using previously generated intermediate files.
 - [x] Fix the OBJ/MTL warning seen during symmetry postprocess import.
 - [x] Add native in-memory ComfyUI mesh/sharp artifact datatypes so nodes can pass richer geometry objects instead of only bare path strings.
+- [x] Add optional `vertices` / `faces` payloads to `QREMESHIFY_MESH` artifacts while preserving current path-backed behavior.
+- [x] Add optional parsed feature-row payloads to `QREMESHIFY_SHARP` artifacts while preserving current path-backed behavior.
+- [x] Populate those in-memory payloads in `QRemeshify Mesh To OBJ` and `QRemeshify Generate Sharp Features`.
 - [x] Remove the remaining non-runtime `QRemeshify` reference artifacts.
 
 ## Testing And Validation
@@ -17,6 +20,11 @@
 
 ## Remaining Audit / Hardening
 - [ ] Audit Blender-backed preprocessing against addon edge cases like modifiers, shapekeys, and multi-object imports.
+
+## In-Memory Contract Expansion
+- [ ] Medium risk: make `QRemeshify OBJ` prefer in-memory artifact payloads and only materialize OBJ / `.sharp` files at the native backend boundary.
+- [ ] Medium risk: optionally parse final/remeshed/traced OBJ outputs back into in-memory mesh payloads for returned mesh artifacts.
+- [ ] Higher risk: evaluate whether `.rosy` / trace-stage contracts should remain file-backed permanently or be abstracted behind internal temporary artifacts only.
 
 ## Documentation
 - [ ] Add a troubleshooting section for `bpy`, DLL loading, and backend failures.
