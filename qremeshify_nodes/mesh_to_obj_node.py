@@ -1,5 +1,6 @@
 """Mesh-to-OBJ conversion node."""
 
+from .artifacts import MESH_ARTIFACT_TYPE, build_mesh_artifact
 from .blender_backend import normalize_mesh_to_obj_with_bpy
 from .blender_backend import bpy_available
 from .constants import NODE_CATEGORY
@@ -24,8 +25,8 @@ class QRemeshifyMeshToOBJ:
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("output_obj", "workspace_dir")
+    RETURN_TYPES = ("STRING", "STRING", MESH_ARTIFACT_TYPE)
+    RETURN_NAMES = ("output_obj", "workspace_dir", "mesh_artifact")
     FUNCTION = "convert"
 
     def convert(self, input_mesh, backend="BPY", output_dir="", output_prefix=""):
@@ -50,4 +51,11 @@ class QRemeshifyMeshToOBJ:
             vertices, faces = load_triangle_mesh_with_trimesh(source_mesh)
             write_triangle_obj(output_obj_path, vertices, faces)
 
-        return (str(output_obj_path), str(workspace_dir))
+        mesh_artifact = build_mesh_artifact(
+            obj_path=str(output_obj_path),
+            workspace_dir=str(workspace_dir),
+            source_path=str(source_mesh),
+            backend=resolved_backend,
+            label=stem,
+        )
+        return (str(output_obj_path), str(workspace_dir), mesh_artifact)

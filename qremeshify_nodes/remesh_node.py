@@ -2,6 +2,15 @@
 
 from pathlib import Path
 
+from .artifacts import (
+    MESH_ARTIFACT_TYPE,
+    SHARP_ARTIFACT_TYPE,
+    QRemeshifyMeshArtifact,
+    QRemeshifySharpArtifact,
+    build_mesh_artifact,
+    resolve_mesh_input,
+    resolve_sharp_input,
+)
 from .backend import QuadwildBackend
 from .blender_backend import bpy_available, postprocess_obj_with_symmetry_with_bpy, preprocess_obj_with_symmetry_with_bpy
 from .constants import NODE_CATEGORY
@@ -49,6 +58,8 @@ class QRemeshifyOBJ:
                 ),
             },
             "optional": {
+                "mesh_artifact": (MESH_ARTIFACT_TYPE,),
+                "sharp_artifact": (SHARP_ARTIFACT_TYPE,),
                 "use_cache": ("BOOLEAN", {"default": False}),
                 "sharp_features_path": ("STRING", {"default": ""}),
                 "sharp_backend": (["AUTO", "BPY", "LIBIGL", "TRIMESH"], {"default": "AUTO"}),
@@ -61,8 +72,16 @@ class QRemeshifyOBJ:
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
-    RETURN_NAMES = ("output_obj", "workspace_dir", "remeshed_obj", "traced_obj")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", MESH_ARTIFACT_TYPE, MESH_ARTIFACT_TYPE, MESH_ARTIFACT_TYPE)
+    RETURN_NAMES = (
+        "output_obj",
+        "workspace_dir",
+        "remeshed_obj",
+        "traced_obj",
+        "output_mesh_artifact",
+        "remeshed_mesh_artifact",
+        "traced_mesh_artifact",
+    )
     FUNCTION = "remesh"
 
     def remesh(
@@ -92,6 +111,8 @@ class QRemeshifyOBJ:
         hard_parity_constraint,
         flow_config,
         satsuma_config,
+        mesh_artifact: QRemeshifyMeshArtifact | None = None,
+        sharp_artifact: QRemeshifySharpArtifact | None = None,
         use_cache=False,
         sharp_features_path="",
         sharp_backend="LIBIGL",
@@ -102,6 +123,8 @@ class QRemeshifyOBJ:
         symmetry_y=False,
         symmetry_z=False,
     ):
+        input_obj = resolve_mesh_input(input_obj, mesh_artifact)
+        sharp_features_path = resolve_sharp_input(sharp_features_path, sharp_artifact)
         time_limits = parse_float_list(callback_time_limit, 8, "callback_time_limit")
         gap_limits = parse_float_list(callback_gap_limit, 8, "callback_gap_limit")
 
@@ -190,4 +213,36 @@ class QRemeshifyOBJ:
                 symmetry_y,
                 symmetry_z,
             )
-        return (str(final_path), str(workspace_dir), str(backend.remeshed_path), str(backend.traced_path))
+        output_mesh_artifact = build_mesh_artifact(
+            obj_path=str(final_path),
+            workspace_dir=str(workspace_dir),
+            source_path=str(working_obj),
+            backend="QREMESHIFY",
+            label=Path(final_path).stem,
+            metadata={"stage": "final"},
+        )
+        remeshed_mesh_artifact = build_mesh_artifact(
+            obj_path=str(backend.remeshed_path),
+            workspace_dir=str(workspace_dir),
+            source_path=str(working_obj),
+            backend="QREMESHIFY",
+            label=backend.remeshed_path.stem,
+            metadata={"stage": "remeshed"},
+        )
+        traced_mesh_artifact = build_mesh_artifact(
+            obj_path=str(backend.traced_path),
+            workspace_dir=str(workspace_dir),
+            source_path=str(working_obj),
+            backend="QREMESHIFY",
+            label=backend.traced_path.stem,
+            metadata={"stage": "traced"},
+        )
+        return (
+            str(final_path),
+            str(workspace_dir),
+            str(backend.remeshed_path),
+            str(backend.traced_path),
+            output_mesh_artifact,
+            remeshed_mesh_artifact,
+            traced_mesh_artifact,
+        )

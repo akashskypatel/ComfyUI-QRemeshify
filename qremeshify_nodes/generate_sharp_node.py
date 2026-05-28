@@ -1,5 +1,6 @@
 """Dedicated sharp-feature generation node."""
 
+from .artifacts import MESH_ARTIFACT_TYPE, SHARP_ARTIFACT_TYPE, build_mesh_artifact, build_sharp_artifact
 from .blender_backend import bpy_available
 from .constants import NODE_CATEGORY
 from .mesh_io import prepare_mesh_workspace
@@ -25,8 +26,8 @@ class QRemeshifyGenerateSharpFeatures:
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING")
-    RETURN_NAMES = ("mesh_obj", "sharp_features_path", "workspace_dir")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", MESH_ARTIFACT_TYPE, SHARP_ARTIFACT_TYPE)
+    RETURN_NAMES = ("mesh_obj", "sharp_features_path", "workspace_dir", "mesh_artifact", "sharp_artifact")
     FUNCTION = "generate"
 
     def generate(self, input_mesh, backend, sharp_angle, output_dir="", output_prefix=""):
@@ -44,4 +45,24 @@ class QRemeshifyGenerateSharpFeatures:
             sharp_output_path,
             resolved_backend,
         )
-        return (str(normalized_obj_path), str(sharp_path), str(workspace_dir))
+        mesh_artifact = build_mesh_artifact(
+            obj_path=str(normalized_obj_path),
+            workspace_dir=str(workspace_dir),
+            source_path=str(source_mesh),
+            backend=resolved_backend,
+            label=stem,
+        )
+        sharp_artifact = build_sharp_artifact(
+            sharp_features_path=str(sharp_path),
+            mesh_obj_path=str(normalized_obj_path),
+            workspace_dir=str(workspace_dir),
+            backend=resolved_backend,
+            label=stem,
+        )
+        return (
+            str(normalized_obj_path),
+            str(sharp_path),
+            str(workspace_dir),
+            mesh_artifact,
+            sharp_artifact,
+        )
