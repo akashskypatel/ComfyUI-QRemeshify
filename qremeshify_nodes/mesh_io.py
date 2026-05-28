@@ -30,10 +30,48 @@ def prepare_output_workspace(output_dir: str, prefix: str = "qremeshify_") -> Pa
     return workspace_dir
 
 
+def resolve_input_mesh_path(input_path: str) -> Path:
+    raw_path = Path(input_path).expanduser()
+    direct_candidate = raw_path.resolve()
+    if direct_candidate.exists():
+        return direct_candidate
+
+    try:
+        import folder_paths  # type: ignore
+    except ImportError:
+        folder_paths = None
+
+    fallback_candidates: list[Path] = []
+    if folder_paths is not None:
+        input_dir = Path(folder_paths.get_input_directory()).expanduser().resolve()
+        if not raw_path.is_absolute():
+            fallback_candidates.append((input_dir / raw_path).resolve())
+        else:
+            try:
+                base_dir = input_dir.parent
+                relative_tail = raw_path.resolve(strict=False).relative_to(base_dir)
+                fallback_candidates.append((input_dir / relative_tail).resolve())
+            except ValueError:
+                pass
+
+    if raw_path.is_absolute():
+        unresolved_absolute = raw_path.resolve(strict=False)
+        for parent in unresolved_absolute.parents:
+            try:
+                relative_tail = unresolved_absolute.relative_to(parent)
+            except ValueError:
+                continue
+            fallback_candidates.append((parent / "input" / relative_tail).resolve())
+
+    for candidate in fallback_candidates:
+        if candidate.exists():
+            return candidate
+
+    raise FileNotFoundError(direct_candidate)
+
+
 def prepare_workspace(input_obj: str, output_dir: str) -> tuple[Path, Path]:
-    source_path = Path(input_obj).expanduser().resolve()
-    if not source_path.exists():
-        raise FileNotFoundError(source_path)
+    source_path = resolve_input_mesh_path(input_obj)
     if source_path.suffix.lower() != ".obj":
         raise QRemeshifyError("Only OBJ input is supported by this node")
 
@@ -45,10 +83,7 @@ def prepare_workspace(input_obj: str, output_dir: str) -> tuple[Path, Path]:
 
 
 def prepare_mesh_workspace(input_mesh: str, output_dir: str, prefix: str = "qremeshify_") -> tuple[Path, Path]:
-    source_path = Path(input_mesh).expanduser().resolve()
-    if not source_path.exists():
-        raise FileNotFoundError(source_path)
-
+    source_path = resolve_input_mesh_path(input_mesh)
     workspace_dir = prepare_output_workspace(output_dir, prefix=prefix)
     return workspace_dir, source_path
 

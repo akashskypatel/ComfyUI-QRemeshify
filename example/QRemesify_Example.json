@@ -1,0 +1,402 @@
+{
+  "id": "790e8ddb-d8a6-4b45-8548-e4247c72c82e",
+  "revision": 0,
+  "last_node_id": 5,
+  "last_link_id": 5,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "QRemeshify Mesh To OBJ",
+      "pos": [
+        -1063.4338048272161,
+        331.9933682373724
+      ],
+      "size": [
+        272.578125,
+        256
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "input_mesh",
+          "type": "STRING",
+          "widget": {
+            "name": "input_mesh"
+          },
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output_obj",
+          "type": "STRING",
+          "links": [
+            2
+          ]
+        },
+        {
+          "name": "workspace_dir",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "mesh_artifact",
+          "type": "QREMESHIFY_MESH",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "QRemeshify Mesh To OBJ"
+      },
+      "widgets_values": [
+        "",
+        "AUTO",
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 2,
+      "type": "QRemeshify Generate Sharp Features",
+      "pos": [
+        -1092.310387838912,
+        637.7214993943423
+      ],
+      "size": [
+        349.1875,
+        336
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "input_mesh",
+          "type": "STRING",
+          "widget": {
+            "name": "input_mesh"
+          },
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mesh_obj",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "sharp_features_path",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "workspace_dir",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "mesh_artifact",
+          "type": "QREMESHIFY_MESH",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "sharp_artifact",
+          "type": "QREMESHIFY_SHARP",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "QRemeshify Generate Sharp Features"
+      },
+      "widgets_values": [
+        "",
+        "AUTO",
+        35,
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 3,
+      "type": "QRemeshify OBJ",
+      "pos": [
+        -676.6143910537226,
+        281.45336690165755
+      ],
+      "size": [
+        375.953125,
+        1244
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mesh_artifact",
+          "shape": 7,
+          "type": "QREMESHIFY_MESH",
+          "link": 3
+        },
+        {
+          "name": "sharp_artifact",
+          "shape": 7,
+          "type": "QREMESHIFY_SHARP",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output_obj",
+          "type": "STRING",
+          "links": [
+            5
+          ]
+        },
+        {
+          "name": "workspace_dir",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "remeshed_obj",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "traced_obj",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "output_mesh_artifact",
+          "type": "QREMESHIFY_MESH",
+          "links": null
+        },
+        {
+          "name": "remeshed_mesh_artifact",
+          "type": "QREMESHIFY_MESH",
+          "links": null
+        },
+        {
+          "name": "traced_mesh_artifact",
+          "type": "QREMESHIFY_MESH",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "QRemeshify OBJ"
+      },
+      "widgets_values": [
+        "",
+        true,
+        true,
+        false,
+        35,
+        1,
+        0,
+        0.005,
+        "LEASTSQUARES",
+        200,
+        0,
+        0.4,
+        true,
+        true,
+        true,
+        0.9,
+        true,
+        0.1,
+        true,
+        false,
+        false,
+        true,
+        true,
+        "SIMPLE",
+        "DEFAULT",
+        false,
+        "",
+        "AUTO",
+        "3,5,10,20,30,60,90,120",
+        "0.005,0.02,0.05,0.10,0.15,0.20,0.25,0.30",
+        "",
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 4,
+      "type": "Load3D",
+      "pos": [
+        -1509.2853832457856,
+        262.53148896336205
+      ],
+      "size": [
+        300,
+        604
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "mesh_path",
+          "type": "STRING",
+          "links": [
+            1
+          ]
+        },
+        {
+          "name": "normal",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "camera_info",
+          "type": "LOAD3D_CAMERA",
+          "links": null
+        },
+        {
+          "name": "recording_video",
+          "type": "VIDEO",
+          "links": null
+        },
+        {
+          "name": "model_3d",
+          "type": "FILE_3D",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Resource Folder": "",
+        "Node name for S&R": "Load3D"
+      },
+      "widgets_values": [
+        "3d/Controller_00001_.glb",
+        "upload3dmodel",
+        "uploadExtraResources",
+        "clear",
+        "",
+        1024,
+        1024
+      ]
+    },
+    {
+      "id": 5,
+      "type": "Preview3D",
+      "pos": [
+        -198.71746067431025,
+        327.6697092601453
+      ],
+      "size": [
+        400,
+        550
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "camera_info",
+          "shape": 7,
+          "type": "LOAD3D_CAMERA",
+          "link": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "model_file",
+          "type": "STRING,FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_FBX,FILE_3D_OBJ,FILE_3D_STL,FILE_3D_USDZ,FILE_3D",
+          "widget": {
+            "name": "model_file"
+          },
+          "link": 5
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Preview3D"
+      },
+      "widgets_values": [
+        "",
+        ""
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      4,
+      2,
+      1,
+      0,
+      "STRING"
+    ],
+    [
+      2,
+      1,
+      0,
+      2,
+      0,
+      "STRING"
+    ],
+    [
+      3,
+      2,
+      3,
+      3,
+      0,
+      "QREMESHIFY_MESH"
+    ],
+    [
+      4,
+      2,
+      4,
+      3,
+      1,
+      "QREMESHIFY_SHARP"
+    ],
+    [
+      5,
+      3,
+      0,
+      5,
+      2,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.8359714856228835,
+      "offset": [
+        2334.2424886111303,
+        -17.112759165680544
+      ]
+    },
+    "frontendVersion": "1.43.18"
+  },
+  "version": 0.4
+}
