@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 from .errors import QRemeshifyError
@@ -37,39 +38,69 @@ def _cleanup_imported_objects(bpy, imported_objects):
             bpy.data.meshes.remove(mesh_data)
 
 
+def _prepare_obj_for_bpy_import(mesh_path: Path):
+    if mesh_path.suffix.lower() != ".obj":
+        return mesh_path, None
+
+    lines = mesh_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    needs_sanitization = any(
+        line.lstrip().startswith("mtllib ") or line.lstrip().startswith("usemtl ")
+        for line in lines
+    )
+    if not needs_sanitization:
+        return mesh_path, None
+
+    sanitized_lines = [
+        line
+        for line in lines
+        if not line.lstrip().startswith("mtllib ") and not line.lstrip().startswith("usemtl ")
+    ]
+    temp_dir = Path(tempfile.mkdtemp(prefix="qremeshify_bpy_obj_"))
+    sanitized_path = temp_dir / mesh_path.name
+    sanitized_path.write_text("\n".join(sanitized_lines) + "\n", encoding="utf-8")
+    return sanitized_path, temp_dir
+
+
 def _import_mesh_with_bpy(mesh_path: Path):
     bpy, _, _ = _require_bpy()
     ext = mesh_path.suffix.lower()
+    import_path, temp_dir = _prepare_obj_for_bpy_import(mesh_path)
 
-    before = {obj.as_pointer() for obj in bpy.data.objects}
-    if ext == ".obj":
-        if hasattr(bpy.ops.wm, "obj_import"):
-            bpy.ops.wm.obj_import(filepath=str(mesh_path))
-        else:  # pragma: no cover - older Blender path
-            bpy.ops.import_scene.obj(filepath=str(mesh_path))
-    elif ext == ".stl":
-        if hasattr(bpy.ops.wm, "stl_import"):
-            bpy.ops.wm.stl_import(filepath=str(mesh_path))
-        else:  # pragma: no cover
-            bpy.ops.import_mesh.stl(filepath=str(mesh_path))
-    elif ext == ".ply":
-        if hasattr(bpy.ops.wm, "ply_import"):
-            bpy.ops.wm.ply_import(filepath=str(mesh_path))
-        else:  # pragma: no cover
-            bpy.ops.import_mesh.ply(filepath=str(mesh_path))
-    elif ext in {".glb", ".gltf"}:
-        bpy.ops.import_scene.gltf(filepath=str(mesh_path))
-    elif ext == ".fbx":
-        bpy.ops.import_scene.fbx(filepath=str(mesh_path))
-    else:
-        raise QRemeshifyError(f"backend='BPY' does not support importing: {mesh_path.suffix}")
+    try:
+        before = {obj.as_pointer() for obj in bpy.data.objects}
+        if ext == ".obj":
+            if hasattr(bpy.ops.wm, "obj_import"):
+                bpy.ops.wm.obj_import(filepath=str(import_path))
+            else:  # pragma: no cover - older Blender path
+                bpy.ops.import_scene.obj(filepath=str(import_path))
+        elif ext == ".stl":
+            if hasattr(bpy.ops.wm, "stl_import"):
+                bpy.ops.wm.stl_import(filepath=str(import_path))
+            else:  # pragma: no cover
+                bpy.ops.import_mesh.stl(filepath=str(import_path))
+        elif ext == ".ply":
+            if hasattr(bpy.ops.wm, "ply_import"):
+                bpy.ops.wm.ply_import(filepath=str(import_path))
+            else:  # pragma: no cover
+                bpy.ops.import_mesh.ply(filepath=str(import_path))
+        elif ext in {".glb", ".gltf"}:
+            bpy.ops.import_scene.gltf(filepath=str(import_path))
+        elif ext == ".fbx":
+            bpy.ops.import_scene.fbx(filepath=str(import_path))
+        else:
+            raise QRemeshifyError(f"backend='BPY' does not support importing: {mesh_path.suffix}")
 
-    imported_objects = [
-        obj for obj in bpy.data.objects if obj.as_pointer() not in before and obj.type == "MESH"
-    ]
-    if not imported_objects:
-        raise QRemeshifyError(f"Blender did not import any mesh objects from: {mesh_path}")
-    return bpy, imported_objects
+        imported_objects = [
+            obj for obj in bpy.data.objects if obj.as_pointer() not in before and obj.type == "MESH"
+        ]
+        if not imported_objects:
+            raise QRemeshifyError(f"Blender did not import any mesh objects from: {mesh_path}")
+        return bpy, imported_objects
+    finally:
+        if temp_dir is not None:
+            for child in temp_dir.iterdir():
+                child.unlink()
+            temp_dir.rmdir()
 
 
 def _build_bmesh_from_objects(imported_objects):
