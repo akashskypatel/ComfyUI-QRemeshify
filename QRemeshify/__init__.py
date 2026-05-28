@@ -12,7 +12,11 @@ bl_info = {
 import bpy
 from .operator import QREMESH_OT_Remesh
 from .props import QWPropertyGroup, QRPropertyGroup
-from .ui import QREMESH_PT_UIPanel, QREMESH_PT_UIAdvancedPanel, QREMESH_PT_UICallbackPanel
+from .ui import (
+    QREMESH_PT_UIPanel,
+    QREMESH_PT_UIAdvancedPanel,
+    QREMESH_PT_UICallbackPanel,
+)
 
 
 classes = [

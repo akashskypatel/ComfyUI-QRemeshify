@@ -11,3 +11,7 @@ run.bat
 *.dylib
 *.so
 *.xcf
+.ruff*/
+.gitnexus/
+.claude/
+.codex/

@@ -1,91 +1,131 @@
-# QRemeshify
-{ [Download](https://ksami.gumroad.com/l/QRemeshify) | [Forums](https://github.com/ksami/QRemeshify/discussions) | [Issues](https://github.com/ksami/QRemeshify/issues) }
+# ComfyUI-QRemeshify
 
-A Blender extension for an easy-to-use remesher that outputs good-quality quad topology
+ComfyUI custom nodes for running the QRemeshify remeshing pipeline from Python, using the bundled `qremesh_backend` DLLs.
 
-Based on [QuadWild with Bi-MDF solver](https://github.com/cgg-bern/quadwild-bimdf) which is based on [QuadWild](https://github.com/nicopietroni/quadwild)
+This project is based on [QRemeshify](https://github.com/ksami/QRemeshify), which is itself based on [QuadWild with Bi-MDF solver](https://github.com/cgg-bern/quadwild-bimdf) and [QuadWild](https://github.com/nicopietroni/quadwild).
 
-# Features
-- Good-quality quad topology even with basic usage
-- Supports symmetry
-- Guide edge flow with edges marked seams/sharp/material boundary/face set boundary
-- Options for advanced fine-tuning available
-- No external programs to download or run
+# What It Does
+- Runs the native QRemeshify backend from ComfyUI
+- Produces quad-oriented remeshed OBJ output
+- Exposes a dedicated sharp-feature generation node
+- Supports `LIBIGL` and `TRIMESH` backends for generating `.sharp` files
+- Reuses the original QRemeshify config files for advanced solver settings
 
-# Example
-[Suzanne 3D Model](/example/suzanne-quadwild-bimdf.stl)  
-[![Suzanne Before/After](/images/suzanne-resized.png)](/images/suzanne.png)
+# Included Nodes
+## `QRemeshify Generate Sharp Features`
+Preprocesses a mesh into:
+- a normalized triangle OBJ
+- a QRemeshify-compatible `.sharp` file
+- a workspace directory path
 
-Model from Elizaveta  
-[![Women's outfit by Elizaveta](/images/outfit-resized.png)](/images/outfit.png)
+Inputs:
+- `input_mesh`: path to the source mesh
+- `backend`: `LIBIGL` or `TRIMESH`
+- `sharp_angle`: dihedral angle threshold in degrees
+- `output_dir` optional
+- `output_prefix` optional
 
-Model from Wildreamz  
-[![Cute cat by Wildreamz](/images/cat-resized.png)](/images/cat.png)
+Outputs:
+- `mesh_obj`
+- `sharp_features_path`
+- `workspace_dir`
 
-## Try it
-[![suzanne-nopreprocess-sharp25](/images/suzanne-settings-resized.png)](/images/suzanne-settings.png)
-1. *Add > Mesh > Monkey*
-2. Add subdivision modifier with 2 levels
-3. Add triangulate modifier
-4. Open QRemeshify panel, disable Preprocess, set sharp angle threshold to 25, enable symmetry in X-axis
+## `QRemeshify OBJ`
+Runs the actual QRemeshify backend on an OBJ file.
+
+Inputs:
+- `input_obj`: path to the OBJ to remesh
+- `preprocess`
+- `smooth`
+- `detect_sharp`
+- `sharp_angle`
+- `sharp_features_path` optional
+- `sharp_backend` optional fallback if `detect_sharp=True` and no `.sharp` file is supplied
+- advanced solver controls such as `alpha`, `ilp_method`, `flow_config`, and `satsuma_config`
+
+Outputs:
+- `output_obj`
+- `workspace_dir`
+- `remeshed_obj`
+- `traced_obj`
+
+# Recommended ComfyUI Workflow
+Use two nodes in sequence:
+
+1. `QRemeshify Generate Sharp Features`
+2. `QRemeshify OBJ`
+
+Wire them like this:
+- `mesh_obj` -> `input_obj`
+- `sharp_features_path` -> `sharp_features_path`
+
+This is the preferred workflow because the sharp-feature node writes a normalized triangle OBJ, and the `.sharp` file indices must match the exact OBJ consumed by the backend.
+
+If you skip the first node, `QRemeshify OBJ` can still auto-generate sharp features when:
+- `detect_sharp=True`
+- `sharp_features_path` is empty
 
 # Requirements
-- Blender 4.2 and above
-- Windows (still testing Linux and macOS)
+- Windows
+- ComfyUI
+- Python environment used by ComfyUI
+- Bundled backend DLLs in `qremesh_backend`
+
+Python packages:
+- `libigl`
+- `trimesh`
+- `numpy`
+
+Install the Python dependencies into ComfyUI's environment:
+
+```powershell
+pip install -r requirements.txt
+```
 
 # Installation
-1. Download the zip file according to your OS from [Gumroad](https://ksami.gumroad.com/l/QRemeshify) or from [Releases](https://github.com/ksami/QRemeshify/releases)
-2. For Blender 4.2 and above, go to *Edit > Preferences > Addons* and click the arrow pointing down on the top right
-3. Click on *Install from Disk...* and select the downloaded zip file
-4. Ensure the checkbox is ticked to enable QRemeshify
+1. Place this repository under `ComfyUI/custom_nodes/`
+2. Install Python dependencies in the ComfyUI venv:
 
-# Usage
-QRemeshify can be accessed from the 3D view N-Panel (Press `N` in 3D view) while in Object mode
+```powershell
+pip install -r requirements.txt
+```
 
-Please remember to save often, time taken for remeshing is dependent on many factors and may take an unexpectedly long time
+3. Restart ComfyUI
 
-# Settings
-| Option | Description | Performance Impact |
-| --- | --- | --- |
-| Preprocess | Runs QuadWild's built-in decimation, triangulation, and attempt to fix common geometry issues | High |
-| Smoothing | Smooths topology after quadrangulation | High |
-| Detect Sharp | Generates sharp features from edges above the threshold, from edges marked sharp, and edges marked seam | Low |
-| Symmetry | Produce symmetrical topology along specified axes | Shortens time taken since less geometry is processed |
+# Mesh Format Support
+The native backend currently consumes OBJ files.
 
-## Advanced Settings
-| Option | Description | Performance Impact |
-| --- | --- | --- |
-| Debug Mode | Shows meshes produced by intermediate steps | Low |
-| Use Cache | Run pipeline from quadrangulation step onwards (see [Pipeline](#pipeline)) (__MUST__ run full pipeline once before) | Shortens time taken since less steps run |
+Current practical support is:
+- `QRemeshify OBJ`: OBJ input only
+- `QRemeshify Generate Sharp Features`: any mesh format that your installed backend loader can read through `trimesh`, then converted to normalized triangle OBJ output
 
-Other than `Debug Mode` and `Use Cache`, advanced settings are passed straight through to the underlying [QuadWild Bi-MDF](https://github.com/cgg-bern/quadwild-bimdf) and [QuadWild](https://github.com/nicopietroni/quadwild) library and are either undocumented or too complex for me to understand. They are still made available here for experimentation and fine-tuning.
+That means a common pattern is:
+- load `STL`, `PLY`, or another supported format in `QRemeshify Generate Sharp Features`
+- pass the generated `mesh_obj` to `QRemeshify OBJ`
+
+# Current Limitations
+- Symmetry is not implemented yet in the ComfyUI node path
+- The final backend output is currently returned as OBJ path strings, not a native in-memory mesh datatype for ComfyUI
+- `QRemeshify OBJ` expects filesystem paths, not uploaded binary mesh tensors or geometry objects
+- Sharp-feature generation depends on `libigl` or `trimesh` being available in the same Python environment ComfyUI is using
+- Convexity inference in the generated `.sharp` file may need refinement for meshes with inconsistent winding
 
 # Tips
-Find and share more tips at [Discussions](https://github.com/ksami/QRemeshify/discussions/categories/tips-and-tricks)
-- Slower for more complex shapes eg. lots of cloth folds, try separating into smaller, simpler parts
-- Having an even distribution of tris seems faster, either manually decimate and triangulate or enable Preprocess to help with this
-- Time taken is proportional to number of faces, decimate to <100k tris would be a good start
-- Needs sufficient geometry to work with to get a good topology, roughly >1k tris
-- Loose geometry may need to be separated into individual objects, *Edit mode > P > Separate by loose*
-- Use edges marked as sharp or UV seams to influence edge flow
-- Use cache to only run quadrangulate step if previous steps have been run once before, for speeding up while tweaking advanced settings
+- Keep meshes reasonably sized; remeshing cost grows quickly with mesh complexity
+- Starting from triangulated geometry usually gives more predictable results
+- If you want sharp guidance, prefer the dedicated sharp-feature node over remesh-node auto-generation
+- Preserve the generated `workspace_dir` when debugging intermediate outputs
 
 # Pipeline
 ```mermaid
 flowchart TD
-    Start --> B{Use cache?}
-    B -->|False| C[Cut mesh in half on specified axes for symmetry]
-    C -.-> D([mesh.obj])
-    D --> E[Calculate sharp features]
-    E --> G[[QuadWild built-in preprocessing and field calculation]]
-    D --> G
-    G -.-> H([mesh_rem.obj])
-    H --> I[[QuadWild field tracing and splitting into patches]]
-    I -.-> J([mesh_rem_p0.obj])
-
-    J --> K[[QuadWild quadrangulation and smoothing]]
-    B -->|True| K
-
-    K -.-> L([mesh_rem_p0_0_quadrangulation.obj, mesh_rem_p0_0_quadrangulation_smooth.obj])
-    L --> M[Add mirror modifier on specified axes for symmetry]
+    A[Input mesh path] --> B[QRemeshify Generate Sharp Features]
+    B --> C[Normalized triangle OBJ]
+    B --> D[.sharp file]
+    C --> E[QRemeshify OBJ]
+    D --> E
+    E --> F[QuadWild preprocess and field]
+    F --> G[Trace patches]
+    G --> H[Quadrangulate]
+    H --> I[Final OBJ output]
 ```

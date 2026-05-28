@@ -1,0 +1,37 @@
+"""Dedicated sharp-feature generation node."""
+
+from .constants import NODE_CATEGORY
+from .mesh_io import prepare_mesh_workspace
+from .sharp_features import generate_sharp_features
+
+
+class QRemeshifyGenerateSharpFeatures:
+    """Generate a QRemeshify .sharp file from a mesh path."""
+
+    CATEGORY = NODE_CATEGORY
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "input_mesh": ("STRING", {"default": ""}),
+                "backend": (["LIBIGL", "TRIMESH"], {"default": "LIBIGL"}),
+                "sharp_angle": ("FLOAT", {"default": 35.0, "min": 0.0, "max": 180.0, "step": 0.1}),
+            },
+            "optional": {
+                "output_dir": ("STRING", {"default": ""}),
+                "output_prefix": ("STRING", {"default": ""}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = ("mesh_obj", "sharp_features_path", "workspace_dir")
+    FUNCTION = "generate"
+
+    def generate(self, input_mesh, backend, sharp_angle, output_dir="", output_prefix=""):
+        workspace_dir, source_mesh = prepare_mesh_workspace(input_mesh, output_dir, prefix="qremeshify_sharp_")
+        stem = output_prefix.strip() or source_mesh.stem
+        normalized_obj_path = workspace_dir / f"{stem}.obj"
+        sharp_output_path = workspace_dir / f"{stem}.sharp"
+        sharp_path = generate_sharp_features(source_mesh, normalized_obj_path, sharp_angle, sharp_output_path, backend)
+        return (str(normalized_obj_path), str(sharp_path), str(workspace_dir))

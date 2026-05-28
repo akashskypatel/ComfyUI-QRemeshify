@@ -1,0 +1,158 @@
+"""Main QRemeshify remesh node."""
+
+from pathlib import Path
+
+from .backend import QuadwildBackend
+from .constants import NODE_CATEGORY
+from .errors import QRemeshifyError
+from .mesh_io import parse_float_list, prepare_workspace
+from .sharp_features import generate_sharp_features
+
+
+class QRemeshifyOBJ:
+    """QRemeshify OBJ remesh node for ComfyUI."""
+
+    CATEGORY = NODE_CATEGORY
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "input_obj": ("STRING", {"default": ""}),
+                "preprocess": ("BOOLEAN", {"default": True}),
+                "smooth": ("BOOLEAN", {"default": True}),
+                "detect_sharp": ("BOOLEAN", {"default": False}),
+                "sharp_angle": ("FLOAT", {"default": 35.0, "min": 0.0, "max": 180.0, "step": 0.1}),
+                "scale_factor": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 10.0, "step": 0.01}),
+                "fixed_chart_clusters": ("INT", {"default": 0, "min": 0, "max": 100000}),
+                "alpha": ("FLOAT", {"default": 0.005, "min": 0.0, "max": 0.999, "step": 0.001}),
+                "ilp_method": (["LEASTSQUARES", "ABS"], {"default": "LEASTSQUARES"}),
+                "time_limit": ("INT", {"default": 200, "min": 1, "max": 86400}),
+                "gap_limit": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
+                "minimum_gap": ("FLOAT", {"default": 0.4, "min": 0.0, "max": 1.0, "step": 0.001}),
+                "isometry": ("BOOLEAN", {"default": True}),
+                "regularity_quadrilaterals": ("BOOLEAN", {"default": True}),
+                "regularity_non_quadrilaterals": ("BOOLEAN", {"default": True}),
+                "regularity_non_quadrilaterals_weight": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "align_singularities": ("BOOLEAN", {"default": True}),
+                "align_singularities_weight": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "repeat_losing_constraints_iterations": ("BOOLEAN", {"default": True}),
+                "repeat_losing_constraints_quads": ("BOOLEAN", {"default": False}),
+                "repeat_losing_constraints_non_quads": ("BOOLEAN", {"default": False}),
+                "repeat_losing_constraints_align": ("BOOLEAN", {"default": True}),
+                "hard_parity_constraint": ("BOOLEAN", {"default": True}),
+                "flow_config": (["SIMPLE", "HALF"], {"default": "SIMPLE"}),
+                "satsuma_config": (
+                    ["DEFAULT", "MST", "ROUND2EVEN", "SYMMDC", "EDGETHRU", "LEMON", "NODETHRU"],
+                    {"default": "DEFAULT"},
+                ),
+            },
+            "optional": {
+                "sharp_features_path": ("STRING", {"default": ""}),
+                "sharp_backend": (["LIBIGL", "TRIMESH"], {"default": "LIBIGL"}),
+                "callback_time_limit": ("STRING", {"default": "3,5,10,20,30,60,90,120"}),
+                "callback_gap_limit": ("STRING", {"default": "0.005,0.02,0.05,0.10,0.15,0.20,0.25,0.30"}),
+                "output_dir": ("STRING", {"default": ""}),
+                "symmetry_x": ("BOOLEAN", {"default": False}),
+                "symmetry_y": ("BOOLEAN", {"default": False}),
+                "symmetry_z": ("BOOLEAN", {"default": False}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("output_obj", "workspace_dir", "remeshed_obj", "traced_obj")
+    FUNCTION = "remesh"
+
+    def remesh(
+        self,
+        input_obj,
+        preprocess,
+        smooth,
+        detect_sharp,
+        sharp_angle,
+        scale_factor,
+        fixed_chart_clusters,
+        alpha,
+        ilp_method,
+        time_limit,
+        gap_limit,
+        minimum_gap,
+        isometry,
+        regularity_quadrilaterals,
+        regularity_non_quadrilaterals,
+        regularity_non_quadrilaterals_weight,
+        align_singularities,
+        align_singularities_weight,
+        repeat_losing_constraints_iterations,
+        repeat_losing_constraints_quads,
+        repeat_losing_constraints_non_quads,
+        repeat_losing_constraints_align,
+        hard_parity_constraint,
+        flow_config,
+        satsuma_config,
+        sharp_features_path="",
+        sharp_backend="LIBIGL",
+        callback_time_limit="3,5,10,20,30,60,90,120",
+        callback_gap_limit="0.005,0.02,0.05,0.10,0.15,0.20,0.25,0.30",
+        output_dir="",
+        symmetry_x=False,
+        symmetry_y=False,
+        symmetry_z=False,
+    ):
+        if symmetry_x or symmetry_y or symmetry_z:
+            raise QRemeshifyError(
+                "Symmetry is not implemented in the ComfyUI node yet because the Blender addon performs that step with Blender mesh operations before invoking the DLL backend"
+            )
+
+        time_limits = parse_float_list(callback_time_limit, 8, "callback_time_limit")
+        gap_limits = parse_float_list(callback_gap_limit, 8, "callback_gap_limit")
+
+        workspace_dir, working_obj = prepare_workspace(input_obj, output_dir)
+        sharp_path = sharp_features_path.strip()
+        if sharp_path and not Path(sharp_path).expanduser().resolve().exists():
+            raise FileNotFoundError(Path(sharp_path).expanduser().resolve())
+
+        if sharp_path:
+            sharp_path = str(Path(sharp_path).expanduser().resolve())
+        elif detect_sharp:
+            sharp_path = str(
+                generate_sharp_features(
+                    working_obj,
+                    working_obj,
+                    sharp_angle,
+                    workspace_dir / f"{working_obj.stem}_generated.sharp",
+                    sharp_backend,
+                )
+            )
+
+        backend = QuadwildBackend(working_obj)
+        backend.remesh_and_field(preprocess, sharp_path, sharp_angle)
+        backend.trace()
+        backend.quadrangulate(
+            enable_smoothing=smooth,
+            scale_fact=scale_factor,
+            fixed_chart_clusters=fixed_chart_clusters,
+            alpha=alpha,
+            ilp_method=ilp_method,
+            time_limit=time_limit,
+            gap_limit=gap_limit,
+            minimum_gap=minimum_gap,
+            isometry=isometry,
+            regularity_quadrilaterals=regularity_quadrilaterals,
+            regularity_non_quadrilaterals=regularity_non_quadrilaterals,
+            regularity_non_quadrilaterals_weight=regularity_non_quadrilaterals_weight,
+            align_singularities=align_singularities,
+            align_singularities_weight=align_singularities_weight,
+            repeat_losing_constraints_iterations=repeat_losing_constraints_iterations,
+            repeat_losing_constraints_quads=repeat_losing_constraints_quads,
+            repeat_losing_constraints_non_quads=repeat_losing_constraints_non_quads,
+            repeat_losing_constraints_align=repeat_losing_constraints_align,
+            hard_parity_constraint=hard_parity_constraint,
+            flow_config=flow_config,
+            satsuma_config=satsuma_config,
+            callback_time_limit=time_limits,
+            callback_gap_limit=gap_limits,
+        )
+
+        final_path = backend.output_smoothed_path if smooth else backend.output_path
+        return (str(final_path), str(workspace_dir), str(backend.remeshed_path), str(backend.traced_path))

@@ -13,7 +13,7 @@ def bisect_on_axes(bm: bmesh.types.BMesh, xaxis: bool, yaxis: bool, zaxis: bool)
             plane_no=(1, 0, 0),
             use_snap_center=False,
             clear_outer=False,
-            clear_inner=True  # Remove geometry on negative side of plane
+            clear_inner=True,  # Remove geometry on negative side of plane
         )
 
     if yaxis:
@@ -25,7 +25,7 @@ def bisect_on_axes(bm: bmesh.types.BMesh, xaxis: bool, yaxis: bool, zaxis: bool)
             plane_no=(0, 1, 0),
             use_snap_center=False,
             clear_outer=False,
-            clear_inner=True  # Remove geometry on negative side of plane
+            clear_inner=True,  # Remove geometry on negative side of plane
         )
 
     if zaxis:
@@ -37,5 +37,5 @@ def bisect_on_axes(bm: bmesh.types.BMesh, xaxis: bool, yaxis: bool, zaxis: bool)
             plane_no=(0, 0, 1),
             use_snap_center=False,
             clear_outer=False,
-            clear_inner=True  # Remove geometry on negative side of plane
+            clear_inner=True,  # Remove geometry on negative side of plane
         )

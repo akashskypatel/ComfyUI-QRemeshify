@@ -6,7 +6,7 @@ class BasePanel:
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "QRemeshify"
-    bl_context = 'objectmode'
+    bl_context = "objectmode"
 
 
 class QREMESH_PT_UIPanel(BasePanel, Panel):
@@ -55,7 +55,7 @@ class QREMESH_PT_UIPanel(BasePanel, Panel):
 class QREMESH_PT_UIAdvancedPanel(BasePanel, Panel):
     bl_parent_id = "QREMESH_PT_UIPanel"
     bl_label = "Advanced"
-    bl_options = {'DEFAULT_CLOSED'}
+    bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, ctx: Context):
         props = ctx.scene.quadwild_props
@@ -119,10 +119,11 @@ class QREMESH_PT_UIAdvancedPanel(BasePanel, Panel):
         col.prop(qr_props, "isometry")
         col.prop(qr_props, "hardParityConstraint")
 
+
 class QREMESH_PT_UICallbackPanel(BasePanel, Panel):
     bl_parent_id = "QREMESH_PT_UIAdvancedPanel"
     bl_label = "Callback Limits"
-    bl_options = {'DEFAULT_CLOSED'}
+    bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, ctx: Context):
         qr_props = ctx.scene.quadpatches_props

@@ -1,0 +1,128 @@
+"""Sharp-feature generation helpers."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+
+from .errors import QRemeshifyError
+from .mesh_io import compute_face_normals, load_triangle_mesh_with_trimesh, write_triangle_obj
+
+
+def collect_sharp_feature_lines(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    sharp_edge_keys: set[tuple[int, int]],
+    include_boundaries: bool,
+) -> list[str]:
+    face_normals = compute_face_normals(vertices, faces)
+    edge_to_occurrences: dict[tuple[int, int], list[tuple[int, int, tuple[int, int]]]] = {}
+    for face_index, face in enumerate(faces):
+        face_vertices = [int(face[0]), int(face[1]), int(face[2])]
+        face_edges = [
+            (face_vertices[0], face_vertices[1]),
+            (face_vertices[1], face_vertices[2]),
+            (face_vertices[2], face_vertices[0]),
+        ]
+        for edge_index, oriented_edge in enumerate(face_edges):
+            edge_key = tuple(sorted(oriented_edge))
+            edge_to_occurrences.setdefault(edge_key, []).append((face_index, edge_index, oriented_edge))
+
+    output_lines: list[str] = []
+    for edge_key, occurrences in edge_to_occurrences.items():
+        is_boundary = len(occurrences) == 1
+        is_sharp = edge_key in sharp_edge_keys
+        if not is_sharp and not (include_boundaries and is_boundary):
+            continue
+
+        face_index, edge_index, _ = occurrences[0]
+        convexity = 0
+        if len(occurrences) == 2:
+            face_a, _, _ = occurrences[0]
+            face_b, _, _ = occurrences[1]
+            edge_start = vertices[edge_key[0]]
+            other_vertex = next(vertex for vertex in faces[face_b].tolist() if vertex not in edge_key)
+            signed_distance = np.dot(vertices[other_vertex] - edge_start, face_normals[face_a])
+            convexity = 1 if signed_distance <= 0.0 else 0
+
+        output_lines.append(f"{convexity},{face_index},{edge_index}")
+
+    return output_lines
+
+
+def write_sharp_feature_file(output_path: Path, feature_lines: list[str]) -> Path:
+    with output_path.open("w", encoding="utf-8") as handle:
+        handle.write(f"{len(feature_lines)}\n")
+        for line in feature_lines:
+            handle.write(f"{line}\n")
+    return output_path
+
+
+def generate_sharp_features_with_libigl(obj_path: Path, sharp_angle: float, output_path: Path) -> Path:
+    try:
+        import igl
+    except ImportError as exc:  # pragma: no cover
+        raise QRemeshifyError("detect_sharp=True requires the 'libigl' Python package to be installed") from exc
+
+    vertices, faces = igl.read_triangle_mesh(str(obj_path))
+    vertices = np.asarray(vertices, dtype=np.float64)
+    faces = np.asarray(faces, dtype=np.int64)
+    if vertices.size == 0 or faces.size == 0:
+        raise QRemeshifyError("libigl could not load a triangle mesh from the OBJ input")
+
+    write_triangle_obj(obj_path, vertices, faces)
+    sharp_result = igl.sharp_edges(vertices, faces, np.pi * (sharp_angle / 180.0))
+    _, _, unique_edges, _, _, sharp_indices = sharp_result
+    unique_edges = np.asarray(unique_edges, dtype=np.int64)
+    sharp_indices = set(np.asarray(sharp_indices, dtype=np.int64).tolist())
+    sharp_edge_keys = {
+        tuple(sorted((int(unique_edge[0]), int(unique_edge[1]))))
+        for unique_index, unique_edge in enumerate(unique_edges)
+        if unique_index in sharp_indices
+    }
+    output_lines = collect_sharp_feature_lines(vertices, faces, sharp_edge_keys, include_boundaries=True)
+    return write_sharp_feature_file(output_path, output_lines)
+
+
+def generate_sharp_features_with_trimesh(
+    mesh_path: Path,
+    normalized_obj_path: Path,
+    sharp_angle: float,
+    output_path: Path,
+) -> Path:
+    try:
+        import trimesh
+    except ImportError as exc:  # pragma: no cover
+        raise QRemeshifyError("backend='TRIMESH' requires the 'trimesh' Python package to be installed") from exc
+
+    vertices, faces = load_triangle_mesh_with_trimesh(mesh_path)
+    write_triangle_obj(normalized_obj_path, vertices, faces)
+
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+    adjacency_edges = np.asarray(mesh.face_adjacency_edges, dtype=np.int64)
+    adjacency_angles = np.asarray(mesh.face_adjacency_angles, dtype=np.float64)
+    sharp_threshold = np.pi * (sharp_angle / 180.0)
+    sharp_edge_keys = {
+        tuple(sorted((int(edge[0]), int(edge[1]))))
+        for edge, angle in zip(adjacency_edges, adjacency_angles)
+        if angle >= sharp_threshold
+    }
+    output_lines = collect_sharp_feature_lines(vertices, faces, sharp_edge_keys, include_boundaries=True)
+    return write_sharp_feature_file(output_path, output_lines)
+
+
+def generate_sharp_features(
+    mesh_path: Path,
+    normalized_obj_path: Path,
+    sharp_angle: float,
+    output_path: Path,
+    backend: str,
+) -> Path:
+    if backend == "LIBIGL":
+        vertices, faces = load_triangle_mesh_with_trimesh(mesh_path)
+        write_triangle_obj(normalized_obj_path, vertices, faces)
+        return generate_sharp_features_with_libigl(normalized_obj_path, sharp_angle, output_path)
+    if backend == "TRIMESH":
+        return generate_sharp_features_with_trimesh(mesh_path, normalized_obj_path, sharp_angle, output_path)
+    raise QRemeshifyError(f"Unsupported sharp feature backend: {backend}")

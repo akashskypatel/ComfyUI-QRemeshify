@@ -1,13 +1,14 @@
 from ctypes import *
 
+
 class Parameters(Structure):
     _fields_ = [
-        ('remesh', c_bool),
-        ('sharpAngle', c_float),
-        ('alpha', c_float),  # Unused
-        ('scaleFact', c_float),  #Unused
-        ('hasFeature', c_bool),
-        ('hasField', c_bool),
+        ("remesh", c_bool),
+        ("sharpAngle", c_float),
+        ("alpha", c_float),  # Unused
+        ("scaleFact", c_float),  # Unused
+        ("hasFeature", c_bool),
+        ("hasField", c_bool),
     ]
 
 
@@ -21,7 +22,6 @@ class QRParameters(Structure):
         ("reproject", c_bool),
         ("splitConcaves", c_bool),
         ("finalSmoothing", c_bool),
-
         ("ilpMethod", c_int),
         ("alpha", c_double),
         ("isometry", c_bool),
@@ -36,18 +36,15 @@ class QRParameters(Structure):
         ("repeatLosingConstraintsAlign", c_bool),
         ("feasibilityFix", c_bool),
         ("hardParityConstraint", c_bool),
-
         ("timeLimit", c_double),
         ("gapLimit", c_double),
         ("minimumGap", c_double),
         ("callbackTimeLimit", POINTER(c_float)),
         ("callbackGapLimit", POINTER(c_float)),
-
         ("chartSmoothingIterations", c_int),
         ("quadrangulationFixedSmoothingIterations", c_int),
         ("quadrangulationNonFixedSmoothingIterations", c_int),
         ("doubletRemoval", c_bool),
-
         ("resultSmoothingIterations", c_int),
         ("resultSmoothingNRing", c_double),
         ("resultSmoothingLaplacianIterations", c_int),
@@ -56,7 +53,7 @@ class QRParameters(Structure):
 
 
 def create_string(input):
-    return create_string_buffer(str.encode(input, encoding='utf-8'))
+    return create_string_buffer(str.encode(input, encoding="utf-8"))
 
 
 def create_default_QRParameters():
@@ -82,8 +79,12 @@ def create_default_QRParameters():
     params.ilpMethod = 1
     params.timeLimit = 200
     params.gapLimit = 0.0
-    params.callbackTimeLimit = (c_float * len(callbackTimeLimitDefault))(*callbackTimeLimitDefault)
-    params.callbackGapLimit = (c_float * len(callbackGapLimitDefault))(*callbackGapLimitDefault)
+    params.callbackTimeLimit = (c_float * len(callbackTimeLimitDefault))(
+        *callbackTimeLimitDefault
+    )
+    params.callbackGapLimit = (c_float * len(callbackGapLimitDefault))(
+        *callbackGapLimitDefault
+    )
     params.minimumGap = 0.4
     params.isometry = 1
     params.regularityQuadrilaterals = 1
