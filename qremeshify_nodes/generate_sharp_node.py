@@ -1,5 +1,6 @@
 """Dedicated sharp-feature generation node."""
 
+from .blender_backend import bpy_available
 from .constants import NODE_CATEGORY
 from .mesh_io import prepare_mesh_workspace
 from .sharp_features import generate_sharp_features
@@ -15,7 +16,7 @@ class QRemeshifyGenerateSharpFeatures:
         return {
             "required": {
                 "input_mesh": ("STRING", {"default": ""}),
-                "backend": (["LIBIGL", "TRIMESH"], {"default": "LIBIGL"}),
+                "backend": (["AUTO", "BPY", "LIBIGL", "TRIMESH"], {"default": "AUTO"}),
                 "sharp_angle": ("FLOAT", {"default": 35.0, "min": 0.0, "max": 180.0, "step": 0.1}),
             },
             "optional": {
@@ -33,5 +34,14 @@ class QRemeshifyGenerateSharpFeatures:
         stem = output_prefix.strip() or source_mesh.stem
         normalized_obj_path = workspace_dir / f"{stem}.obj"
         sharp_output_path = workspace_dir / f"{stem}.sharp"
-        sharp_path = generate_sharp_features(source_mesh, normalized_obj_path, sharp_angle, sharp_output_path, backend)
+        resolved_backend = backend
+        if backend == "AUTO":
+            resolved_backend = "BPY" if bpy_available() else "LIBIGL"
+        sharp_path = generate_sharp_features(
+            source_mesh,
+            normalized_obj_path,
+            sharp_angle,
+            sharp_output_path,
+            resolved_backend,
+        )
         return (str(normalized_obj_path), str(sharp_path), str(workspace_dir))

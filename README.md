@@ -8,7 +8,7 @@ This project is based on [QRemeshify](https://github.com/ksami/QRemeshify), whic
 - Runs the native QRemeshify backend from ComfyUI
 - Produces quad-oriented remeshed OBJ output
 - Exposes a dedicated sharp-feature generation node
-- Supports `LIBIGL` and `TRIMESH` backends for generating `.sharp` files
+- Supports `BPY`, `LIBIGL`, and `TRIMESH` backends for preprocessing and generating `.sharp` files
 - Reuses the original QRemeshify config files for advanced solver settings
 
 # Included Nodes
@@ -17,10 +17,11 @@ Converts a mesh path into an OBJ file for downstream QRemeshify nodes.
 
 Behavior:
 - if the input is already `.obj`, it is copied into the node workspace
-- otherwise the mesh is loaded through `trimesh` and written as a triangle OBJ
+- otherwise the mesh is normalized into a triangle OBJ through the selected backend
 
 Inputs:
 - `input_mesh`: path to the source mesh
+- `backend`: `AUTO`, `BPY`, or `TRIMESH`
 - `output_dir` optional
 - `output_prefix` optional
 
@@ -36,7 +37,7 @@ Preprocesses a mesh into:
 
 Inputs:
 - `input_mesh`: path to the source mesh
-- `backend`: `LIBIGL` or `TRIMESH`
+- `backend`: `AUTO`, `BPY`, `LIBIGL`, or `TRIMESH`
 - `sharp_angle`: dihedral angle threshold in degrees
 - `output_dir` optional
 - `output_prefix` optional
@@ -81,6 +82,10 @@ If you skip the first node, `QRemeshify OBJ` can still auto-generate sharp featu
 - `detect_sharp=True`
 - `sharp_features_path` is empty
 
+`AUTO` backend behavior:
+- prefers `BPY` when Blender's Python module is available
+- falls back to `LIBIGL` or `TRIMESH` when `bpy` is unavailable
+
 # Requirements
 - Windows
 - ComfyUI
@@ -88,6 +93,7 @@ If you skip the first node, `QRemeshify OBJ` can still auto-generate sharp featu
 - Bundled backend DLLs in `qremesh_backend`
 
 Python packages:
+- `bpy` optional but preferred for Blender-faithful preprocessing
 - `libigl`
 - `trimesh`
 - `numpy`
@@ -112,19 +118,21 @@ pip install -r requirements.txt
 The native backend currently consumes OBJ files.
 
 Current practical support is:
-- `QRemeshify Mesh To OBJ`: converts common mesh formats readable by `trimesh` into OBJ
+- `QRemeshify Mesh To OBJ`: converts common mesh formats into OBJ through `bpy` or `trimesh`
 - `QRemeshify OBJ`: OBJ input only
-- `QRemeshify Generate Sharp Features`: any mesh format that your installed backend loader can read through `trimesh`, then converted to normalized triangle OBJ output
+- `QRemeshify Generate Sharp Features`: any mesh format that the selected backend can import, then converted to normalized triangle OBJ output
 
 That means a common pattern is:
 - load `STL`, `PLY`, or another supported format in `QRemeshify Mesh To OBJ` or `QRemeshify Generate Sharp Features`
 - pass the generated `mesh_obj` to `QRemeshify OBJ`
 
 # Current Limitations
-- Symmetry is not implemented yet in the ComfyUI node path
+- Symmetry preprocessing/postprocessing is implemented only on the `bpy` path inside `QRemeshify OBJ`
+- When symmetry is enabled, the final output OBJ is mirrored back to full form, while intermediate remesh/traced outputs remain in the pre-mirror half-mesh form
 - The final backend output is currently returned as OBJ path strings, not a native in-memory mesh datatype for ComfyUI
 - `QRemeshify OBJ` expects filesystem paths, not uploaded binary mesh tensors or geometry objects
-- Sharp-feature generation depends on `libigl` or `trimesh` being available in the same Python environment ComfyUI is using
+- Blender-backed preprocessing requires `bpy` to be installed in the exact Python environment ComfyUI is using
+- Sharp-feature generation depends on the selected backend being available in the same Python environment ComfyUI is using
 - Convexity inference in the generated `.sharp` file may need refinement for meshes with inconsistent winding
 
 # Tips

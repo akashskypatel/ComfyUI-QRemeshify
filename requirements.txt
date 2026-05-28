@@ -1,2 +1,3 @@
+bpy
 libigl
 trimesh

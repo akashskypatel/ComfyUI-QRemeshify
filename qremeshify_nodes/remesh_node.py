@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from .backend import QuadwildBackend
+from .blender_backend import bpy_available, postprocess_obj_with_symmetry_with_bpy, preprocess_obj_with_symmetry_with_bpy
 from .constants import NODE_CATEGORY
 from .errors import QRemeshifyError
 from .mesh_io import parse_float_list, prepare_workspace
@@ -49,7 +50,7 @@ class QRemeshifyOBJ:
             },
             "optional": {
                 "sharp_features_path": ("STRING", {"default": ""}),
-                "sharp_backend": (["LIBIGL", "TRIMESH"], {"default": "LIBIGL"}),
+                "sharp_backend": (["AUTO", "BPY", "LIBIGL", "TRIMESH"], {"default": "AUTO"}),
                 "callback_time_limit": ("STRING", {"default": "3,5,10,20,30,60,90,120"}),
                 "callback_gap_limit": ("STRING", {"default": "0.005,0.02,0.05,0.10,0.15,0.20,0.25,0.30"}),
                 "output_dir": ("STRING", {"default": ""}),
@@ -99,15 +100,23 @@ class QRemeshifyOBJ:
         symmetry_y=False,
         symmetry_z=False,
     ):
-        if symmetry_x or symmetry_y or symmetry_z:
-            raise QRemeshifyError(
-                "Symmetry is not implemented in the ComfyUI node yet because the Blender addon performs that step with Blender mesh operations before invoking the DLL backend"
-            )
-
         time_limits = parse_float_list(callback_time_limit, 8, "callback_time_limit")
         gap_limits = parse_float_list(callback_gap_limit, 8, "callback_gap_limit")
 
         workspace_dir, working_obj = prepare_workspace(input_obj, output_dir)
+        if symmetry_x or symmetry_y or symmetry_z:
+            if not bpy_available():
+                raise QRemeshifyError(
+                    "Symmetry currently requires Blender's Python module 'bpy' to be available in the same environment as ComfyUI"
+                )
+            preprocess_obj_with_symmetry_with_bpy(
+                working_obj,
+                working_obj,
+                symmetry_x,
+                symmetry_y,
+                symmetry_z,
+            )
+
         sharp_path = sharp_features_path.strip()
         if sharp_path and not Path(sharp_path).expanduser().resolve().exists():
             raise FileNotFoundError(Path(sharp_path).expanduser().resolve())
@@ -115,13 +124,16 @@ class QRemeshifyOBJ:
         if sharp_path:
             sharp_path = str(Path(sharp_path).expanduser().resolve())
         elif detect_sharp:
+            resolved_backend = sharp_backend
+            if sharp_backend == "AUTO":
+                resolved_backend = "BPY" if bpy_available() else "LIBIGL"
             sharp_path = str(
                 generate_sharp_features(
                     working_obj,
                     working_obj,
                     sharp_angle,
                     workspace_dir / f"{working_obj.stem}_generated.sharp",
-                    sharp_backend,
+                    resolved_backend,
                 )
             )
 
@@ -155,4 +167,13 @@ class QRemeshifyOBJ:
         )
 
         final_path = backend.output_smoothed_path if smooth else backend.output_path
+        if symmetry_x or symmetry_y or symmetry_z:
+            mirrored_final_path = workspace_dir / f"{Path(final_path).stem}_symmetry.obj"
+            final_path = postprocess_obj_with_symmetry_with_bpy(
+                Path(final_path),
+                mirrored_final_path,
+                symmetry_x,
+                symmetry_y,
+                symmetry_z,
+            )
         return (str(final_path), str(workspace_dir), str(backend.remeshed_path), str(backend.traced_path))

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .blender_backend import normalize_mesh_and_generate_sharp_with_bpy
 from .errors import QRemeshifyError
 from .mesh_io import compute_face_normals, load_triangle_mesh_with_trimesh, write_triangle_obj
 
@@ -119,6 +120,13 @@ def generate_sharp_features(
     output_path: Path,
     backend: str,
 ) -> Path:
+    if backend == "BPY":
+        return normalize_mesh_and_generate_sharp_with_bpy(
+            mesh_path,
+            normalized_obj_path,
+            sharp_angle,
+            output_path,
+        )
     if backend == "LIBIGL":
         vertices, faces = load_triangle_mesh_with_trimesh(mesh_path)
         write_triangle_obj(normalized_obj_path, vertices, faces)
