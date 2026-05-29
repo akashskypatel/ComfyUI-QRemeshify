@@ -5,8 +5,6 @@ from pathlib import Path
 from comfy_api.latest import IO
 
 from .artifacts import (
-    MESH_ARTIFACT_TYPE,
-    SHARP_ARTIFACT_TYPE,
     build_mesh_artifact,
     build_sharp_artifact,
     parse_obj_payload,
@@ -21,16 +19,17 @@ from .sharp_features import generate_sharp_features
 class QRemeshifyGenerateSharpFeatures(IO.ComfyNode):
     """Generate a QRemeshify .sharp file from a mesh path."""
 
-    CATEGORY = NODE_CATEGORY
-
     @classmethod
     def define_schema(cls) -> IO.Schema:
         return IO.Schema(
             node_id="QRemeshifyGenerateSharpFeatures",
             display_name="QRemeshify Generate Sharp Features",
-            category=cls.CATEGORY,
+            category=NODE_CATEGORY,
             inputs=[
-                IO.String.Input("input_mesh", default=""),
+                IO.MultiType.Input(
+                    IO.String.Input("input_mesh", default=""),
+                    [IO.File3DAny, IO.Mesh],
+                ),
                 IO.Combo.Input(
                     "backend",
                     options=["AUTO", "BPY", "LIBIGL", "TRIMESH"],
@@ -43,15 +42,15 @@ class QRemeshifyGenerateSharpFeatures(IO.ComfyNode):
                     max=180.0,
                     step=0.1,
                 ),
-                IO.String.Input("output_dir", default="", is_list=False),
-                IO.String.Input("output_prefix", default="", is_list=False),
+                IO.String.Input("output_dir", default=""),
+                IO.String.Input("output_prefix", default=""),
             ],
             outputs=[
                 IO.String.Output(display_name="mesh_obj"),
                 IO.String.Output(display_name="sharp_features_path"),
                 IO.String.Output(display_name="workspace_dir"),
-                IO.CustomOutput(MESH_ARTIFACT_TYPE, display_name="mesh_artifact"),
-                IO.CustomOutput(SHARP_ARTIFACT_TYPE, display_name="sharp_artifact"),
+                IO.AnyType.Output(display_name="mesh_artifact"),
+                IO.AnyType.Output(display_name="sharp_artifact"),
             ],
         )
 

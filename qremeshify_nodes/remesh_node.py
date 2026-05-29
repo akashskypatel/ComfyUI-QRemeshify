@@ -5,8 +5,6 @@ from pathlib import Path
 from comfy_api.latest import IO
 
 from .artifacts import (
-    MESH_ARTIFACT_TYPE,
-    SHARP_ARTIFACT_TYPE,
     QRemeshifyMeshArtifact,
     QRemeshifySharpArtifact,
     build_mesh_artifact,
@@ -31,14 +29,12 @@ from .sharp_features import generate_sharp_features
 class QRemeshifyOBJ(IO.ComfyNode):
     """QRemeshify OBJ remesh node for ComfyUI."""
 
-    CATEGORY = NODE_CATEGORY
-
     @classmethod
     def define_schema(cls) -> IO.Schema:
         return IO.Schema(
             node_id="QRemeshifyOBJ",
             display_name="QRemeshify OBJ",
-            category=cls.CATEGORY,
+            category=NODE_CATEGORY,
             inputs=[
                 IO.String.Input("input_obj", default=""),
                 IO.Boolean.Input("preprocess", default=True),
@@ -103,10 +99,10 @@ class QRemeshifyOBJ(IO.ComfyNode):
                     ],
                     default="DEFAULT",
                 ),
-                IO.CustomInput(MESH_ARTIFACT_TYPE, "mesh_artifact"),
-                IO.CustomInput(SHARP_ARTIFACT_TYPE, "sharp_artifact"),
+                IO.AnyType.Input("mesh_artifact"),
+                IO.AnyType.Input("sharp_artifact"),
                 IO.Boolean.Input("use_cache", default=False),
-                IO.String.Input("sharp_features_path", default="", is_list=False),
+                IO.String.Input("sharp_features_path", default=""),
                 IO.Combo.Input(
                     "sharp_backend",
                     options=["AUTO", "BPY", "LIBIGL", "TRIMESH"],
@@ -115,14 +111,12 @@ class QRemeshifyOBJ(IO.ComfyNode):
                 IO.String.Input(
                     "callback_time_limit",
                     default="3,5,10,20,30,60,90,120",
-                    is_list=False,
                 ),
                 IO.String.Input(
                     "callback_gap_limit",
                     default="0.005,0.02,0.05,0.10,0.15,0.20,0.25,0.30",
-                    is_list=False,
                 ),
-                IO.String.Input("output_dir", default="", is_list=False),
+                IO.String.Input("output_dir", default=""),
                 IO.Boolean.Input("symmetry_x", default=False),
                 IO.Boolean.Input("symmetry_y", default=False),
                 IO.Boolean.Input("symmetry_z", default=False),
@@ -132,15 +126,9 @@ class QRemeshifyOBJ(IO.ComfyNode):
                 IO.String.Output(display_name="workspace_dir"),
                 IO.String.Output(display_name="remeshed_obj"),
                 IO.String.Output(display_name="traced_obj"),
-                IO.CustomOutput(
-                    MESH_ARTIFACT_TYPE, display_name="output_mesh_artifact"
-                ),
-                IO.CustomOutput(
-                    MESH_ARTIFACT_TYPE, display_name="remeshed_mesh_artifact"
-                ),
-                IO.CustomOutput(
-                    MESH_ARTIFACT_TYPE, display_name="traced_mesh_artifact"
-                ),
+                IO.AnyType.Output(display_name="output_mesh_artifact"),
+                IO.AnyType.Output(display_name="remeshed_mesh_artifact"),
+                IO.AnyType.Output(display_name="traced_mesh_artifact"),
             ],
         )
 

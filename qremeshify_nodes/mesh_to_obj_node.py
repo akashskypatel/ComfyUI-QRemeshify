@@ -6,7 +6,6 @@ import numpy as np
 from comfy_api.latest import IO
 
 from .artifacts import (
-    MESH_ARTIFACT_TYPE,
     build_mesh_artifact,
     mesh_arrays_to_lists,
     parse_obj_payload,
@@ -105,28 +104,29 @@ def _coerce_mesh_input(input_mesh, output_dir: str, output_prefix: str):
 class QRemeshifyMeshToOBJ(IO.ComfyNode):
     """Convert a mesh file to an OBJ suitable for downstream nodes."""
 
-    CATEGORY = NODE_CATEGORY
-
     @classmethod
     def define_schema(cls) -> IO.Schema:
         return IO.Schema(
             node_id="QRemeshifyMeshToOBJ",
             display_name="QRemeshify Mesh to OBJ",
-            category=cls.CATEGORY,
+            category=NODE_CATEGORY,
             inputs=[
-                IO.String.Input("input_mesh", default=""),
+                IO.MultiType.Input(
+                    IO.String.Input("input_mesh", default=""),
+                    [IO.File3DAny, IO.Mesh],
+                ),
                 IO.Combo.Input(
                     "backend",
                     options=["AUTO", "BPY", "TRIMESH"],
                     default="AUTO",
                 ),
-                IO.String.Input("output_dir", default="", is_list=False),
-                IO.String.Input("output_prefix", default="", is_list=False),
+                IO.String.Input("output_dir", default=""),
+                IO.String.Input("output_prefix", default=""),
             ],
             outputs=[
                 IO.String.Output(display_name="output_obj"),
                 IO.String.Output(display_name="workspace_dir"),
-                IO.CustomOutput(MESH_ARTIFACT_TYPE, display_name="mesh_artifact"),
+                IO.AnyType.Output(display_name="mesh_artifact"),
             ],
         )
 
