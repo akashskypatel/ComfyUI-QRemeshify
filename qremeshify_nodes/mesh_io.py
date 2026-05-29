@@ -14,7 +14,9 @@ from .errors import QRemeshifyError
 def parse_float_list(value: str, expected_count: int, label: str) -> list[float]:
     parts = [part.strip() for part in value.split(",") if part.strip()]
     if len(parts) != expected_count:
-        raise QRemeshifyError(f"{label} must contain exactly {expected_count} comma-separated values")
+        raise QRemeshifyError(
+            f"{label} must contain exactly {expected_count} comma-separated values"
+        )
     try:
         return [float(part) for part in parts]
     except ValueError as exc:
@@ -82,7 +84,9 @@ def prepare_workspace(input_obj: str, output_dir: str) -> tuple[Path, Path]:
     return workspace_dir, working_obj
 
 
-def prepare_mesh_workspace(input_mesh: str, output_dir: str, prefix: str = "qremeshify_") -> tuple[Path, Path]:
+def prepare_mesh_workspace(
+    input_mesh: str, output_dir: str, prefix: str = "qremeshify_"
+) -> tuple[Path, Path]:
     source_path = resolve_input_mesh_path(input_mesh)
     workspace_dir = prepare_output_workspace(output_dir, prefix=prefix)
     return workspace_dir, source_path
@@ -94,7 +98,9 @@ def write_triangle_obj(obj_path: Path, vertices: np.ndarray, faces: np.ndarray) 
         for vertex in vertices:
             handle.write(f"v {vertex[0]:.6f} {vertex[1]:.6f} {vertex[2]:.6f}\n")
         for face in faces:
-            handle.write(f"f {int(face[0]) + 1} {int(face[1]) + 1} {int(face[2]) + 1}\n")
+            handle.write(
+                f"f {int(face[0]) + 1} {int(face[1]) + 1} {int(face[2]) + 1}\n"
+            )
 
 
 def compute_face_normals(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
@@ -111,13 +117,19 @@ def load_triangle_mesh_with_trimesh(mesh_path: Path) -> tuple[np.ndarray, np.nda
     try:
         import trimesh
     except ImportError as exc:  # pragma: no cover
-        raise QRemeshifyError("This node requires the 'trimesh' Python package to be installed") from exc
+        raise QRemeshifyError(
+            "This node requires the 'trimesh' Python package to be installed"
+        ) from exc
 
     loaded = trimesh.load_mesh(str(mesh_path), process=False)
     if isinstance(loaded, trimesh.Scene):
         if not loaded.geometry:
             raise QRemeshifyError(f"No mesh geometry found in: {mesh_path}")
-        meshes = [geometry for geometry in loaded.geometry.values() if isinstance(geometry, trimesh.Trimesh)]
+        meshes = [
+            geometry
+            for geometry in loaded.geometry.values()
+            if isinstance(geometry, trimesh.Trimesh)
+        ]
         if not meshes:
             raise QRemeshifyError(f"No triangular mesh geometry found in: {mesh_path}")
         mesh = trimesh.util.concatenate(meshes)

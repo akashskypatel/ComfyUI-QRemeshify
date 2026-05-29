@@ -9,7 +9,6 @@ import numpy as np
 
 from .mesh_io import write_triangle_obj
 
-
 MESH_ARTIFACT_TYPE = "QREMESHIFY_MESH"
 SHARP_ARTIFACT_TYPE = "QREMESHIFY_SHARP"
 
@@ -83,7 +82,9 @@ def build_sharp_artifact(
     )
 
 
-def resolve_mesh_input(input_obj: str, mesh_artifact: QRemeshifyMeshArtifact | None) -> str:
+def resolve_mesh_input(
+    input_obj: str, mesh_artifact: QRemeshifyMeshArtifact | None
+) -> str:
     if mesh_artifact is not None and mesh_artifact.obj_path:
         return mesh_artifact.obj_path
     return input_obj
@@ -98,7 +99,9 @@ def resolve_sharp_input(
     return sharp_features_path
 
 
-def materialize_mesh_artifact(mesh_artifact: QRemeshifyMeshArtifact, target_path: str) -> str:
+def materialize_mesh_artifact(
+    mesh_artifact: QRemeshifyMeshArtifact, target_path: str
+) -> str:
     if mesh_artifact.vertices and mesh_artifact.faces:
         vertices = np.asarray(mesh_artifact.vertices, dtype=np.float64)
         faces = np.asarray(mesh_artifact.faces, dtype=np.int64)
@@ -113,7 +116,9 @@ def materialize_mesh_artifact(mesh_artifact: QRemeshifyMeshArtifact, target_path
     raise ValueError("Mesh artifact does not contain materializable payloads")
 
 
-def materialize_sharp_artifact(sharp_artifact: QRemeshifySharpArtifact, target_path: str) -> str:
+def materialize_sharp_artifact(
+    sharp_artifact: QRemeshifySharpArtifact, target_path: str
+) -> str:
     if sharp_artifact.feature_rows:
         destination = Path(target_path)
         with destination.open("w", encoding="utf-8") as handle:
@@ -133,7 +138,9 @@ def materialize_sharp_artifact(sharp_artifact: QRemeshifySharpArtifact, target_p
 def parse_obj_payload(obj_path: str) -> tuple[list[list[float]], list[list[int]]]:
     vertices: list[list[float]] = []
     faces: list[list[int]] = []
-    for line in Path(obj_path).read_text(encoding="utf-8", errors="ignore").splitlines():
+    for line in (
+        Path(obj_path).read_text(encoding="utf-8", errors="ignore").splitlines()
+    ):
         if line.startswith("v "):
             parts = line.split()
             if len(parts) >= 4:
@@ -159,5 +166,7 @@ def parse_sharp_payload(sharp_path: str) -> list[list[int]]:
     return rows
 
 
-def mesh_arrays_to_lists(vertices: np.ndarray, faces: np.ndarray) -> tuple[list[list[float]], list[list[int]]]:
+def mesh_arrays_to_lists(
+    vertices: np.ndarray, faces: np.ndarray
+) -> tuple[list[list[float]], list[list[int]]]:
     return vertices.tolist(), faces.tolist()

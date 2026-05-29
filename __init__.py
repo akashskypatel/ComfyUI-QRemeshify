@@ -1,8 +1,27 @@
 """ComfyUI-QRemeshify custom nodes."""
 
-try:
-    from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
-except ImportError:
-    from nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
+from comfy_api.latest import IO, ComfyExtension
+from typing_extensions import override
 
-__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+from .qremeshify_nodes import (
+    QRemeshifyGenerateSharpFeatures,
+    QRemeshifyLoad3D,
+    QRemeshifyMeshToOBJ,
+    QRemeshifyOBJ,
+)
+
+
+class QRemeshifyExtension(ComfyExtension):
+    @override
+    async def get_node_list(self) -> list[type[IO.ComfyNode]]:
+        return [
+            QRemeshifyGenerateSharpFeatures,
+            QRemeshifyLoad3D,
+            QRemeshifyMeshToOBJ,
+            QRemeshifyOBJ,
+        ]
+
+
+async def comfy_entrypoint() -> QRemeshifyExtension:
+    """ComfyUI calls this to load your extension and its nodes."""
+    return QRemeshifyExtension()

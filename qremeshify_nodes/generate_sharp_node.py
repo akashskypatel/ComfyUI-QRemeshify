@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from comfy_api.latest import IO
+
 from .artifacts import (
     MESH_ARTIFACT_TYPE,
     SHARP_ARTIFACT_TYPE,
@@ -16,39 +18,64 @@ from .mesh_to_obj_node import QRemeshifyMeshToOBJ
 from .sharp_features import generate_sharp_features
 
 
-class QRemeshifyGenerateSharpFeatures:
+class QRemeshifyGenerateSharpFeatures(IO.ComfyNode):
     """Generate a QRemeshify .sharp file from a mesh path."""
 
     CATEGORY = NODE_CATEGORY
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "input_mesh": ("STRING,FILE_3D,MESH", {"default": ""}),
-                "backend": (["AUTO", "BPY", "LIBIGL", "TRIMESH"], {"default": "AUTO"}),
-                "sharp_angle": ("FLOAT", {"default": 35.0, "min": 0.0, "max": 180.0, "step": 0.1}),
-            },
-            "optional": {
-                "output_dir": ("STRING", {"default": ""}),
-                "output_prefix": ("STRING", {"default": ""}),
-            },
-        }
+    def define_schema(cls) -> IO.Schema:
+        return IO.Schema(
+            node_id="QRemeshifyGenerateSharpFeatures",
+            display_name="QRemeshify Generate Sharp Features",
+            category=cls.CATEGORY,
+            inputs=[
+                IO.String.Input("input_mesh", default=""),
+                IO.Combo.Input(
+                    "backend",
+                    options=["AUTO", "BPY", "LIBIGL", "TRIMESH"],
+                    default="AUTO",
+                ),
+                IO.Float.Input(
+                    "sharp_angle",
+                    default=35.0,
+                    min=0.0,
+                    max=180.0,
+                    step=0.1,
+                ),
+                IO.String.Input("output_dir", default="", is_list=False),
+                IO.String.Input("output_prefix", default="", is_list=False),
+            ],
+            outputs=[
+                IO.String.Output(display_name="mesh_obj"),
+                IO.String.Output(display_name="sharp_features_path"),
+                IO.String.Output(display_name="workspace_dir"),
+                IO.CustomOutput(MESH_ARTIFACT_TYPE, display_name="mesh_artifact"),
+                IO.CustomOutput(SHARP_ARTIFACT_TYPE, display_name="sharp_artifact"),
+            ],
+        )
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING", MESH_ARTIFACT_TYPE, SHARP_ARTIFACT_TYPE)
-    RETURN_NAMES = ("mesh_obj", "sharp_features_path", "workspace_dir", "mesh_artifact", "sharp_artifact")
-    FUNCTION = "generate"
-
-    def generate(self, input_mesh, backend, sharp_angle, output_dir="", output_prefix=""):
+    @classmethod
+    def execute(
+        cls,
+        input_mesh,
+        backend,
+        sharp_angle,
+        output_dir="",
+        output_prefix="",
+        **kwargs,
+    ) -> IO.NodeOutput:
         resolved_backend = backend
         if backend == "AUTO":
             resolved_backend = "BPY" if bpy_available() else "LIBIGL"
         normalization_backend = "BPY" if resolved_backend == "BPY" else "TRIMESH"
-        normalized_obj_path, workspace_dir, normalized_mesh_artifact = QRemeshifyMeshToOBJ().convert(
-            input_mesh,
-            backend=normalization_backend,
-            output_dir=output_dir,
-            output_prefix=output_prefix,
+        normalized_obj_path, workspace_dir, normalized_mesh_artifact = (
+            QRemeshifyMeshToOBJ().convert(
+                input_mesh,
+                backend=normalization_backend,
+                output_dir=output_dir,
+                output_prefix=output_prefix,
+            )
         )
         normalized_obj_path = Path(normalized_obj_path)
         workspace_dir = Path(workspace_dir)
@@ -80,7 +107,7 @@ class QRemeshifyGenerateSharpFeatures:
             backend=resolved_backend,
             label=stem,
         )
-        return (
+        return IO.NodeOutput(
             str(normalized_obj_path),
             str(sharp_path),
             str(workspace_dir),

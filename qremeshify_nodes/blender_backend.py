@@ -10,8 +10,8 @@ from .errors import QRemeshifyError
 
 def bpy_available() -> bool:
     try:
-        import bpy  # noqa: F401
         import bmesh  # noqa: F401
+        import bpy  # noqa: F401
         import mathutils  # noqa: F401
     except ImportError:
         return False
@@ -20,8 +20,8 @@ def bpy_available() -> bool:
 
 def _require_bpy():
     try:
-        import bpy
         import bmesh
+        import bpy
         import mathutils
     except ImportError as exc:  # pragma: no cover - depends on local environment
         raise QRemeshifyError(
@@ -53,7 +53,8 @@ def _prepare_obj_for_bpy_import(mesh_path: Path):
     sanitized_lines = [
         line
         for line in lines
-        if not line.lstrip().startswith("mtllib ") and not line.lstrip().startswith("usemtl ")
+        if not line.lstrip().startswith("mtllib ")
+        and not line.lstrip().startswith("usemtl ")
     ]
     temp_dir = Path(tempfile.mkdtemp(prefix="qremeshify_bpy_obj_"))
     sanitized_path = temp_dir / mesh_path.name
@@ -88,13 +89,19 @@ def _import_mesh_with_bpy(mesh_path: Path):
         elif ext == ".fbx":
             bpy.ops.import_scene.fbx(filepath=str(import_path))
         else:
-            raise QRemeshifyError(f"backend='BPY' does not support importing: {mesh_path.suffix}")
+            raise QRemeshifyError(
+                f"backend='BPY' does not support importing: {mesh_path.suffix}"
+            )
 
         imported_objects = [
-            obj for obj in bpy.data.objects if obj.as_pointer() not in before and obj.type == "MESH"
+            obj
+            for obj in bpy.data.objects
+            if obj.as_pointer() not in before and obj.type == "MESH"
         ]
         if not imported_objects:
-            raise QRemeshifyError(f"Blender did not import any mesh objects from: {mesh_path}")
+            raise QRemeshifyError(
+                f"Blender did not import any mesh objects from: {mesh_path}"
+            )
         return bpy, imported_objects
     finally:
         if temp_dir is not None:
@@ -114,7 +121,9 @@ def _build_bmesh_from_objects(imported_objects):
         try:
             temp_bm = bmesh.new()
             temp_bm.from_mesh(mesh)
-            bmesh.ops.transform(temp_bm, matrix=evaluated_obj.matrix_world, verts=temp_bm.verts)
+            bmesh.ops.transform(
+                temp_bm, matrix=evaluated_obj.matrix_world, verts=temp_bm.verts
+            )
             temp_mesh = bpy.data.meshes.new(name="QRemeshifyTempMesh")
             try:
                 temp_bm.to_mesh(temp_mesh)
@@ -125,7 +134,9 @@ def _build_bmesh_from_objects(imported_objects):
         finally:
             evaluated_obj.to_mesh_clear()
 
-    bmesh.ops.triangulate(merged, faces=merged.faces, quad_method="SHORT_EDGE", ngon_method="BEAUTY")
+    bmesh.ops.triangulate(
+        merged, faces=merged.faces, quad_method="SHORT_EDGE", ngon_method="BEAUTY"
+    )
     merged.faces.ensure_lookup_table()
     merged.edges.ensure_lookup_table()
     merged.verts.ensure_lookup_table()
@@ -140,10 +151,14 @@ def _active_symmetry_axes(symmetry_x: bool, symmetry_y: bool, symmetry_z: bool):
     ]
 
 
-def _apply_symmetry_preprocess_to_bmesh(bm, symmetry_x: bool, symmetry_y: bool, symmetry_z: bool, tolerance: float):
+def _apply_symmetry_preprocess_to_bmesh(
+    bm, symmetry_x: bool, symmetry_y: bool, symmetry_z: bool, tolerance: float
+):
     _, bmesh, _ = _require_bpy()
 
-    for axis_index, enabled in _active_symmetry_axes(symmetry_x, symmetry_y, symmetry_z):
+    for axis_index, enabled in _active_symmetry_axes(
+        symmetry_x, symmetry_y, symmetry_z
+    ):
         if not enabled:
             continue
 
@@ -177,9 +192,15 @@ def _mirror_bmesh_across_axis(bm, axis_index: int):
     _, bmesh, _ = _require_bpy()
 
     original_faces = list(bm.faces)
-    result = bmesh.ops.duplicate(bm, geom=list(bm.verts) + list(bm.edges) + original_faces)
-    dup_verts = [item for item in result["geom"] if isinstance(item, bmesh.types.BMVert)]
-    dup_faces = [item for item in result["geom"] if isinstance(item, bmesh.types.BMFace)]
+    result = bmesh.ops.duplicate(
+        bm, geom=list(bm.verts) + list(bm.edges) + original_faces
+    )
+    dup_verts = [
+        item for item in result["geom"] if isinstance(item, bmesh.types.BMVert)
+    ]
+    dup_faces = [
+        item for item in result["geom"] if isinstance(item, bmesh.types.BMFace)
+    ]
     for vert in dup_verts:
         vert.co[axis_index] *= -1.0
 
@@ -187,10 +208,14 @@ def _mirror_bmesh_across_axis(bm, axis_index: int):
         bmesh.ops.reverse_faces(bm, faces=dup_faces)
 
 
-def _apply_symmetry_postprocess_to_bmesh(bm, symmetry_x: bool, symmetry_y: bool, symmetry_z: bool, tolerance: float):
+def _apply_symmetry_postprocess_to_bmesh(
+    bm, symmetry_x: bool, symmetry_y: bool, symmetry_z: bool, tolerance: float
+):
     _, bmesh, _ = _require_bpy()
 
-    for axis_index, enabled in _active_symmetry_axes(symmetry_x, symmetry_y, symmetry_z):
+    for axis_index, enabled in _active_symmetry_axes(
+        symmetry_x, symmetry_y, symmetry_z
+    ):
         if not enabled:
             continue
         _mirror_bmesh_across_axis(bm, axis_index)
@@ -213,7 +238,9 @@ def _write_bmesh_obj(bm, obj_path: Path) -> None:
         for vertex in bm.verts:
             handle.write(f"v {vertex.co.x:.6f} {vertex.co.y:.6f} {vertex.co.z:.6f}\n")
         for face in bm.faces:
-            handle.write(f"vn {face.normal.x:.4f} {face.normal.y:.4f} {face.normal.z:.4f}\n")
+            handle.write(
+                f"vn {face.normal.x:.4f} {face.normal.y:.4f} {face.normal.z:.4f}\n"
+            )
         for face_index, face in enumerate(bm.faces):
             indices = [f"{vert.index + 1}//{face_index + 1}" for vert in face.verts]
             handle.write(f"f {' '.join(indices)}\n")
@@ -241,7 +268,8 @@ def _write_sharp_file_from_bmesh(bm, sharp_angle: float, output_path: Path) -> P
         is_face_set_boundary = (
             face_set_data_layer is not None
             and len(edge.link_faces) > 1
-            and edge.link_faces[0][face_set_data_layer] != edge.link_faces[1][face_set_data_layer]
+            and edge.link_faces[0][face_set_data_layer]
+            != edge.link_faces[1][face_set_data_layer]
         )
         if not (
             is_sharp
@@ -255,7 +283,11 @@ def _write_sharp_file_from_bmesh(bm, sharp_angle: float, output_path: Path) -> P
 
         convexity = 1 if edge.is_convex else 0
         face = edge.link_faces[0]
-        edge_index = next(index for index, face_edge in enumerate(face.edges) if face_edge.index == edge.index)
+        edge_index = next(
+            index
+            for index, face_edge in enumerate(face.edges)
+            if face_edge.index == edge.index
+        )
         feature_lines.append(f"{convexity},{face.index},{edge_index}")
 
     with output_path.open("w", encoding="utf-8") as handle:
@@ -290,7 +322,9 @@ def preprocess_obj_with_symmetry_with_bpy(
     bm = None
     try:
         bm = _build_bmesh_from_objects(imported_objects)
-        _apply_symmetry_preprocess_to_bmesh(bm, symmetry_x, symmetry_y, symmetry_z, tolerance)
+        _apply_symmetry_preprocess_to_bmesh(
+            bm, symmetry_x, symmetry_y, symmetry_z, tolerance
+        )
         _write_bmesh_obj(bm, output_obj_path)
         return output_obj_path
     finally:
@@ -329,7 +363,9 @@ def postprocess_obj_with_symmetry_with_bpy(
     bm = None
     try:
         bm = _build_bmesh_from_objects(imported_objects)
-        _apply_symmetry_postprocess_to_bmesh(bm, symmetry_x, symmetry_y, symmetry_z, tolerance)
+        _apply_symmetry_postprocess_to_bmesh(
+            bm, symmetry_x, symmetry_y, symmetry_z, tolerance
+        )
         _write_bmesh_obj(bm, output_obj_path)
         return output_obj_path
     finally:

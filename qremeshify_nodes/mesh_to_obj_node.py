@@ -3,10 +3,15 @@
 from pathlib import Path
 
 import numpy as np
+from comfy_api.latest import IO
 
-from .artifacts import MESH_ARTIFACT_TYPE, build_mesh_artifact, mesh_arrays_to_lists, parse_obj_payload
-from .blender_backend import normalize_mesh_to_obj_with_bpy
-from .blender_backend import bpy_available
+from .artifacts import (
+    MESH_ARTIFACT_TYPE,
+    build_mesh_artifact,
+    mesh_arrays_to_lists,
+    parse_obj_payload,
+)
+from .blender_backend import bpy_available, normalize_mesh_to_obj_with_bpy
 from .constants import NODE_CATEGORY
 from .errors import QRemeshifyError
 from .mesh_io import (
@@ -73,7 +78,11 @@ def _coerce_mesh_input(input_mesh, output_dir: str, output_prefix: str):
 
     if hasattr(input_mesh, "save_to") and hasattr(input_mesh, "format"):
         workspace_dir = prepare_output_workspace(output_dir, prefix="qremeshify_obj_")
-        suffix = f".{str(getattr(input_mesh, 'format', '')).lstrip('.')}" if getattr(input_mesh, "format", "") else ""
+        suffix = (
+            f".{str(getattr(input_mesh, 'format', '')).lstrip('.')}"
+            if getattr(input_mesh, "format", "")
+            else ""
+        )
         stem = output_prefix.strip() or "mesh"
         source_mesh = workspace_dir / f"{stem}_source{suffix}"
         saved_path = Path(input_mesh.save_to(str(source_mesh))).expanduser().resolve()
@@ -88,33 +97,51 @@ def _coerce_mesh_input(input_mesh, output_dir: str, output_prefix: str):
         stem = output_prefix.strip() or "mesh"
         return workspace_dir, None, stem, "mesh"
 
-    raise QRemeshifyError("input_mesh must be a file path string, FILE_3D, or MESH object")
+    raise QRemeshifyError(
+        "input_mesh must be a file path string, FILE_3D, or MESH object"
+    )
 
 
-class QRemeshifyMeshToOBJ:
+class QRemeshifyMeshToOBJ(IO.ComfyNode):
     """Convert a mesh file to an OBJ suitable for downstream nodes."""
 
     CATEGORY = NODE_CATEGORY
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "input_mesh": ("STRING,FILE_3D,MESH", {"default": ""}),
-            },
-            "optional": {
-                "backend": (["AUTO", "BPY", "TRIMESH"], {"default": "AUTO"}),
-                "output_dir": ("STRING", {"default": ""}),
-                "output_prefix": ("STRING", {"default": ""}),
-            },
-        }
+    def define_schema(cls) -> IO.Schema:
+        return IO.Schema(
+            node_id="QRemeshifyMeshToOBJ",
+            display_name="QRemeshify Mesh to OBJ",
+            category=cls.CATEGORY,
+            inputs=[
+                IO.String.Input("input_mesh", default=""),
+                IO.Combo.Input(
+                    "backend",
+                    options=["AUTO", "BPY", "TRIMESH"],
+                    default="AUTO",
+                ),
+                IO.String.Input("output_dir", default="", is_list=False),
+                IO.String.Input("output_prefix", default="", is_list=False),
+            ],
+            outputs=[
+                IO.String.Output(display_name="output_obj"),
+                IO.String.Output(display_name="workspace_dir"),
+                IO.CustomOutput(MESH_ARTIFACT_TYPE, display_name="mesh_artifact"),
+            ],
+        )
 
-    RETURN_TYPES = ("STRING", "STRING", MESH_ARTIFACT_TYPE)
-    RETURN_NAMES = ("output_obj", "workspace_dir", "mesh_artifact")
-    FUNCTION = "convert"
-
-    def convert(self, input_mesh, backend="BPY", output_dir="", output_prefix=""):
-        workspace_dir, source_mesh, stem, input_kind = _coerce_mesh_input(input_mesh, output_dir, output_prefix)
+    @classmethod
+    def execute(
+        cls,
+        input_mesh,
+        backend="AUTO",
+        output_dir="",
+        output_prefix="",
+        **kwargs,
+    ) -> IO.NodeOutput:
+        workspace_dir, source_mesh, stem, input_kind = _coerce_mesh_input(
+            input_mesh, output_dir, output_prefix
+        )
         output_obj_path = workspace_dir / f"{stem}.obj"
 
         resolved_backend = backend
@@ -146,4 +173,8 @@ class QRemeshifyMeshToOBJ:
             backend=resolved_backend,
             label=stem,
         )
-        return (str(output_obj_path), str(workspace_dir), mesh_artifact)
+        return IO.NodeOutput(
+            str(output_obj_path),
+            str(workspace_dir),
+            mesh_artifact,
+        )

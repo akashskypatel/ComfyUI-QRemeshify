@@ -3,10 +3,26 @@
 from __future__ import annotations
 
 import platform
-from ctypes import POINTER, Structure, byref, c_bool, c_char_p, c_double, c_float, c_int, cdll
+from ctypes import (
+    POINTER,
+    Structure,
+    byref,
+    c_bool,
+    c_char_p,
+    c_double,
+    c_float,
+    c_int,
+    cdll,
+)
 from pathlib import Path
 
-from .constants import BACKEND_DIR, CONFIG_DIR, FLOW_CONFIG_FILES, ILP_METHODS, SATSUMA_CONFIG_FILES
+from .constants import (
+    BACKEND_DIR,
+    CONFIG_DIR,
+    FLOW_CONFIG_FILES,
+    ILP_METHODS,
+    SATSUMA_CONFIG_FILES,
+)
 from .errors import QRemeshifyError
 
 
@@ -81,7 +97,9 @@ def default_qr_parameters() -> QRParameters:
     params.ilpMethod = 1
     params.timeLimit = 200
     params.gapLimit = 0.0
-    params.callbackTimeLimit = (c_float * len(callback_time_limit))(*callback_time_limit)
+    params.callbackTimeLimit = (c_float * len(callback_time_limit))(
+        *callback_time_limit
+    )
     params.callbackGapLimit = (c_float * len(callback_gap_limit))(*callback_gap_limit)
     params.minimumGap = 0.4
     params.isometry = True
@@ -133,11 +151,22 @@ class QuadwildBackend:
         self.quadwild = cdll.LoadLibrary(str(quadwild_path))
         self.quadpatches = cdll.LoadLibrary(str(quadpatches_path))
 
-        self.quadwild.remeshAndField2.argtypes = [POINTER(Parameters), c_char_p, c_char_p, c_char_p]
+        self.quadwild.remeshAndField2.argtypes = [
+            POINTER(Parameters),
+            c_char_p,
+            c_char_p,
+            c_char_p,
+        ]
         self.quadwild.remeshAndField2.restype = None
         self.quadwild.trace2.argtypes = [c_char_p]
         self.quadwild.trace2.restype = c_bool
-        self.quadpatches.quadPatches.argtypes = [c_char_p, POINTER(QRParameters), c_float, c_int, c_bool]
+        self.quadpatches.quadPatches.argtypes = [
+            c_char_p,
+            POINTER(QRParameters),
+            c_float,
+            c_int,
+            c_bool,
+        ]
         self.quadpatches.quadPatches.restype = c_int
 
         self.mesh_path = mesh_path
@@ -147,10 +176,16 @@ class QuadwildBackend:
         self.remeshed_path = Path(f"{mesh_prefix}_rem.obj")
         self.traced_path = Path(f"{mesh_prefix}_rem_p0.obj")
         self.output_path = Path(f"{mesh_prefix}_rem_p0_0_quadrangulation.obj")
-        self.output_smoothed_path = Path(f"{mesh_prefix}_rem_p0_0_quadrangulation_smooth.obj")
+        self.output_smoothed_path = Path(
+            f"{mesh_prefix}_rem_p0_0_quadrangulation_smooth.obj"
+        )
 
-    def remesh_and_field(self, remesh: bool, sharp_features_path: str, sharp_angle: float) -> None:
-        sharp_path = sharp_features_path if sharp_features_path else str(self.sharp_path)
+    def remesh_and_field(
+        self, remesh: bool, sharp_features_path: str, sharp_angle: float
+    ) -> None:
+        sharp_path = (
+            sharp_features_path if sharp_features_path else str(self.sharp_path)
+        )
         params = Parameters(
             remesh=remesh,
             sharpAngle=sharp_angle if sharp_features_path else -1,
@@ -170,15 +205,21 @@ class QuadwildBackend:
             raise QRemeshifyError("remeshAndField failed") from exc
 
         if not self.remeshed_path.exists():
-            raise QRemeshifyError(f"Expected remeshed output was not created: {self.remeshed_path}")
+            raise QRemeshifyError(
+                f"Expected remeshed output was not created: {self.remeshed_path}"
+            )
 
     def trace(self) -> None:
         try:
-            success = self.quadwild.trace2(str(self.remeshed_path.with_suffix("")).encode("utf-8"))
+            success = self.quadwild.trace2(
+                str(self.remeshed_path.with_suffix("")).encode("utf-8")
+            )
         except Exception as exc:  # pragma: no cover
             raise QRemeshifyError("trace failed") from exc
         if not success or not self.traced_path.exists():
-            raise QRemeshifyError(f"Expected traced output was not created: {self.traced_path}")
+            raise QRemeshifyError(
+                f"Expected traced output was not created: {self.traced_path}"
+            )
 
     def quadrangulate(
         self,
@@ -223,10 +264,18 @@ class QuadwildBackend:
         params.repeatLosingConstraintsNonQuads = repeat_losing_constraints_non_quads
         params.repeatLosingConstraintsAlign = repeat_losing_constraints_align
         params.hardParityConstraint = hard_parity_constraint
-        params.flow_config_filename = str(CONFIG_DIR / FLOW_CONFIG_FILES[flow_config]).encode("utf-8")
-        params.satsuma_config_filename = str(CONFIG_DIR / SATSUMA_CONFIG_FILES[satsuma_config]).encode("utf-8")
-        params.callbackTimeLimit = (c_float * len(callback_time_limit))(*callback_time_limit)
-        params.callbackGapLimit = (c_float * len(callback_gap_limit))(*callback_gap_limit)
+        params.flow_config_filename = str(
+            CONFIG_DIR / FLOW_CONFIG_FILES[flow_config]
+        ).encode("utf-8")
+        params.satsuma_config_filename = str(
+            CONFIG_DIR / SATSUMA_CONFIG_FILES[satsuma_config]
+        ).encode("utf-8")
+        params.callbackTimeLimit = (c_float * len(callback_time_limit))(
+            *callback_time_limit
+        )
+        params.callbackGapLimit = (c_float * len(callback_gap_limit))(
+            *callback_gap_limit
+        )
 
         try:
             self.quadpatches.quadPatches(
@@ -241,4 +290,6 @@ class QuadwildBackend:
 
         final_path = self.output_smoothed_path if enable_smoothing else self.output_path
         if not final_path.exists():
-            raise QRemeshifyError(f"Expected quadrangulated output was not created: {final_path}")
+            raise QRemeshifyError(
+                f"Expected quadrangulated output was not created: {final_path}"
+            )
