@@ -25,6 +25,14 @@ from .sharp_features import generate_sharp_features, libigl_sharp_edges_availabl
 
 
 def to_numpy(value):
+    """Convert tensor/array-like to numpy array.
+    
+    Args:
+        value: Input tensor/array-like
+        
+    Returns:
+        Numpy array
+    """
     if hasattr(value, "detach"):
         value = value.detach()
     if hasattr(value, "cpu"):
@@ -33,6 +41,17 @@ def to_numpy(value):
 
 
 def extract_mesh_arrays(mesh_value):
+    """Extract vertices and faces from MESH input.
+    
+    Args:
+        mesh_value: MESH input value
+        
+    Returns:
+        Tuple of (vertices, faces)
+        
+    Raises:
+        QRemeshifyError: If MESH input is invalid
+    """
     vertices = to_numpy(mesh_value.vertices)
     faces = to_numpy(mesh_value.faces)
 
@@ -69,6 +88,11 @@ def extract_mesh_arrays(mesh_value):
 
 
 def libigl_available() -> bool:
+    """Check if libigl is available.
+    
+    Returns:
+        True if libigl is available, False otherwise
+    """
     try:
         import igl  # noqa: F401
     except ImportError:
@@ -77,6 +101,11 @@ def libigl_available() -> bool:
 
 
 def _require_igl():
+    """Require libigl to be available.
+    
+    Raises:
+        QRemeshifyError: If libigl is not installed
+    """
     try:
         import igl
     except ImportError as exc:  # pragma: no cover
@@ -87,6 +116,17 @@ def _require_igl():
 
 
 def load_triangle_mesh_with_libigl(mesh_path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Load triangle mesh using libigl.
+    
+    Args:
+        mesh_path: Mesh file path
+        
+    Returns:
+        Tuple of (vertices, faces)
+        
+    Raises:
+        QRemeshifyError: If libigl fails to load the mesh
+    """
     igl = _require_igl()
     vertices, faces = igl.read_triangle_mesh(str(mesh_path))
     vertices = np.asarray(vertices, dtype=np.float64)
@@ -105,6 +145,16 @@ def load_triangle_mesh_with_libigl(mesh_path: Path) -> tuple[np.ndarray, np.ndar
 def write_triangle_obj_with_libigl(
     obj_path: Path, vertices: np.ndarray, faces: np.ndarray
 ) -> None:
+    """Write triangle mesh to OBJ file using libigl.
+    
+    Args:
+        obj_path: Output OBJ file path
+        vertices: Vertex coordinates
+        faces: Face indices
+        
+    Raises:
+        QRemeshifyError: If libigl fails to write the OBJ file
+    """
     igl = _require_igl()
     written = igl.write_obj(
         str(obj_path),
@@ -118,6 +168,16 @@ def write_triangle_obj_with_libigl(
 def resolve_decimate_target_faces(
     face_count: int, decimate_target_faces: int, decimate_ratio: float
 ) -> int:
+    """Resolve decimation target faces.
+    
+    Args:
+        face_count: Current face count
+        decimate_target_faces: Target number of faces
+        decimate_ratio: Decimation ratio
+        
+    Returns:
+        Resolved target face count
+    """
     if face_count <= 0:
         return 0
     if decimate_target_faces > 0:
@@ -134,6 +194,17 @@ def decimate_mesh_with_libigl(
     decimate_target_faces: int,
     decimate_ratio: float,
 ) -> tuple[np.ndarray, np.ndarray, bool, int]:
+    """Decimate mesh using libigl.
+    
+    Args:
+        vertices: Vertex coordinates
+        faces: Face indices
+        decimate_target_faces: Target number of faces
+        decimate_ratio: Decimation ratio
+        
+    Returns:
+        Tuple of (reduced_vertices, reduced_faces, reached_target, target_faces)
+    """
     target_faces = resolve_decimate_target_faces(
         len(faces),
         decimate_target_faces,
@@ -160,6 +231,14 @@ def decimate_mesh_with_libigl(
 
 
 def inspect_libigl_manifold(faces: np.ndarray) -> tuple[bool, bool]:
+    """Inspect mesh manifold properties using libigl.
+    
+    Args:
+        faces: Face indices
+        
+    Returns:
+        Tuple of (edge_manifold, vertex_manifold)
+    """
     igl = _require_igl()
     edge_result = igl.is_edge_manifold(np.asarray(faces, dtype=np.int64))
     edge_manifold = bool(edge_result[0] if isinstance(edge_result, tuple) else edge_result)
@@ -169,6 +248,19 @@ def inspect_libigl_manifold(faces: np.ndarray) -> tuple[bool, bool]:
 
 
 def coerce_mesh_input(input_mesh, output_dir: str, output_prefix: str):
+    """Coerce mesh input to a standardized format.
+    
+    Args:
+        input_mesh: Input mesh (file path, FILE_3D, or MESH)
+        output_dir: Output directory
+        output_prefix: Output prefix
+        
+    Returns:
+        Tuple of (workspace_dir, source_mesh, stem, source_type)
+        
+    Raises:
+        QRemeshifyError: If input_mesh is invalid
+    """
     if isinstance(input_mesh, str):
         workspace_dir, source_mesh = prepare_mesh_workspace(
             input_mesh,
@@ -220,6 +312,27 @@ def preprocess_mesh_input(
     sharp_angle=35.0,
     sharp_backend="AUTO",
 ):
+    """Preprocess mesh input for QRemeshify.
+    
+    Args:
+        input_mesh: Input mesh (file path, FILE_3D, or MESH)
+        backend: Backend to use ("AUTO", "BPY", "LIBIGL")
+        output_dir: Output directory
+        output_prefix: Output prefix
+        symmetry_x: Enable X-axis symmetry
+        symmetry_y: Enable Y-axis symmetry
+        symmetry_z: Enable Z-axis symmetry
+        decimate_enabled: Enable decimation
+        decimate_target_faces: Target number of faces
+        decimate_ratio: Decimation ratio
+        allow_backend_fallback: Allow backend fallback
+        generate_sharp: Generate sharp features
+        sharp_angle: Sharp angle threshold
+        sharp_backend: Sharp features backend
+        
+    Returns:
+        Tuple of (workspace_dir, output_obj_path, input_kind)
+    """
     workspace_dir, source_mesh, stem, input_kind = coerce_mesh_input(
         input_mesh, output_dir, output_prefix
     )
