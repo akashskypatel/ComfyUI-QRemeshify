@@ -9,12 +9,25 @@ from .errors import QRemeshifyError
 
 
 def bpy_available() -> bool:
+    """Check if Blender is available.
+    
+    Returns:
+        bool: True if Blender is available, False otherwise
+    """
     from .bpy_subprocess import bpy_available_via_subprocess
 
     return bpy_available_via_subprocess()
 
 
 def _require_bpy():
+    """Require Blender Python modules.
+    
+    Returns:
+        tuple: Tuple of (bpy, bmesh, mathutils)
+        
+    Raises:
+        QRemeshifyError: If Blender Python modules are not available
+    """
     try:
         import bpy
         import bmesh
@@ -27,6 +40,12 @@ def _require_bpy():
 
 
 def _cleanup_imported_objects(bpy, imported_objects):
+    """Clean up imported objects.
+    
+    Args:
+        bpy: Blender Python module
+        imported_objects: List of imported objects
+    """
     for obj in imported_objects:
         mesh_data = obj.data if obj.type == "MESH" else None
         bpy.data.objects.remove(obj, do_unlink=True)
@@ -35,6 +54,14 @@ def _cleanup_imported_objects(bpy, imported_objects):
 
 
 def _prepare_obj_for_bpy_import(mesh_path: Path):
+    """Prepare OBJ file for Blender import.
+    
+    Args:
+        mesh_path: Path to the mesh file
+        
+    Returns:
+        tuple: Tuple of (mesh_path, temp_path)
+    """
     if mesh_path.suffix.lower() != ".obj":
         return mesh_path, None
 
@@ -59,6 +86,14 @@ def _prepare_obj_for_bpy_import(mesh_path: Path):
 
 
 def _import_mesh_with_bpy(mesh_path: Path):
+    """Import mesh with Blender.
+    
+    Args:
+        mesh_path: Path to the mesh file
+        
+    Returns:
+        tuple: Tuple of (imported_objects, temp_dir)
+    """
     bpy, _, _ = _require_bpy()
     ext = mesh_path.suffix.lower()
     import_path, temp_dir = _prepare_obj_for_bpy_import(mesh_path)
@@ -107,6 +142,14 @@ def _import_mesh_with_bpy(mesh_path: Path):
 
 
 def _build_bmesh_from_objects(imported_objects):
+    """Build bmesh from imported objects.
+    
+    Args:
+        imported_objects: List of imported objects
+        
+    Returns:
+        bmesh: Merged bmesh
+    """
     bpy, bmesh, _ = _require_bpy()
     depsgraph = bpy.context.evaluated_depsgraph_get()
     merged = bmesh.new()
@@ -140,6 +183,16 @@ def _build_bmesh_from_objects(imported_objects):
 
 
 def _active_symmetry_axes(symmetry_x: bool, symmetry_y: bool, symmetry_z: bool):
+    """Get active symmetry axes.
+    
+    Args:
+        symmetry_x: Whether to apply symmetry on X axis
+        symmetry_y: Whether to apply symmetry on Y axis
+        symmetry_z: Whether to apply symmetry on Z axis
+        
+    Returns:
+        list: List of active symmetry axes
+    """
     return [
         (0, symmetry_x),
         (1, symmetry_y),
@@ -150,6 +203,15 @@ def _active_symmetry_axes(symmetry_x: bool, symmetry_y: bool, symmetry_z: bool):
 def _apply_symmetry_preprocess_to_bmesh(
     bm, symmetry_x: bool, symmetry_y: bool, symmetry_z: bool, tolerance: float
 ):
+    """Apply symmetry preprocessing to bmesh.
+    
+    Args:
+        bm: BMesh to process
+        symmetry_x: Whether to apply symmetry on X axis
+        symmetry_y: Whether to apply symmetry on Y axis
+        symmetry_z: Whether to apply symmetry on Z axis
+        tolerance: Tolerance for symmetry operations
+    """
     _, bmesh, _ = _require_bpy()
 
     for axis_index, enabled in _active_symmetry_axes(
@@ -185,6 +247,12 @@ def _apply_symmetry_preprocess_to_bmesh(
 
 
 def _mirror_bmesh_across_axis(bm, axis_index: int):
+    """Mirror bmesh across axis.
+    
+    Args:
+        bm: BMesh to process
+        axis_index: Axis index to mirror across
+    """
     _, bmesh, _ = _require_bpy()
 
     original_faces = list(bm.faces)
@@ -207,6 +275,15 @@ def _mirror_bmesh_across_axis(bm, axis_index: int):
 def _apply_symmetry_postprocess_to_bmesh(
     bm, symmetry_x: bool, symmetry_y: bool, symmetry_z: bool, tolerance: float
 ):
+    """Apply symmetry postprocessing to bmesh.
+    
+    Args:
+        bm: BMesh to process
+        symmetry_x: Whether to apply symmetry on X axis
+        symmetry_y: Whether to apply symmetry on Y axis
+        symmetry_z: Whether to apply symmetry on Z axis
+        tolerance: Tolerance for symmetry operations
+    """
     _, bmesh, _ = _require_bpy()
 
     for axis_index, enabled in _active_symmetry_axes(
@@ -227,6 +304,12 @@ def _apply_symmetry_postprocess_to_bmesh(
 
 
 def _write_bmesh_obj(bm, obj_path: Path) -> None:
+    """Write bmesh to OBJ file.
+    
+    Args:
+        bm: BMesh to write
+        obj_path: Path to write OBJ file
+    """
     bm.verts.index_update()
     bm.faces.index_update()
     with obj_path.open("w", encoding="utf-8") as handle:
@@ -243,6 +326,16 @@ def _write_bmesh_obj(bm, obj_path: Path) -> None:
 
 
 def _write_sharp_file_from_bmesh(bm, sharp_angle: float, output_path: Path) -> Path:
+    """Write sharp file from bmesh.
+    
+    Args:
+        bm: BMesh to write
+        sharp_angle: Sharp angle threshold
+        output_path: Path to write sharp file
+        
+    Returns:
+        Path: Path to written sharp file
+    """
     import math
 
     bm.faces.index_update()
@@ -294,6 +387,15 @@ def _write_sharp_file_from_bmesh(bm, sharp_angle: float, output_path: Path) -> P
 
 
 def normalize_mesh_to_obj_with_bpy(mesh_path: Path, output_obj_path: Path) -> Path:
+    """Normalize mesh to OBJ with Blender.
+    
+    Args:
+        mesh_path: Path to input mesh
+        output_obj_path: Path to output OBJ
+        
+    Returns:
+        Path: Path to normalized OBJ
+    """
     from .bpy_subprocess import normalize_mesh_to_obj_with_bpy_subprocess
 
     return normalize_mesh_to_obj_with_bpy_subprocess(mesh_path, output_obj_path)
@@ -310,6 +412,22 @@ def preprocess_mesh_with_bpy(
     decimate_ratio: float = 1.0,
     tolerance: float = 1e-5,
 ) -> Path:
+    """Preprocess mesh with Blender.
+    
+    Args:
+        mesh_path: Path to input mesh
+        output_obj_path: Path to output OBJ
+        symmetry_x: Whether to apply symmetry on X axis
+        symmetry_y: Whether to apply symmetry on Y axis
+        symmetry_z: Whether to apply symmetry on Z axis
+        decimate_enabled: Whether to enable decimation
+        decimate_target_faces: Target number of faces after decimation
+        decimate_ratio: Decimation ratio
+        tolerance: Tolerance for symmetry operations
+        
+    Returns:
+        Path: Path to preprocessed OBJ
+    """
     from .bpy_subprocess import preprocess_mesh_with_bpy_subprocess
 
     return preprocess_mesh_with_bpy_subprocess(
@@ -333,6 +451,19 @@ def preprocess_obj_with_symmetry_with_bpy(
     symmetry_z: bool,
     tolerance: float = 1e-5,
 ) -> Path:
+    """Preprocess OBJ with symmetry using Blender.
+    
+    Args:
+        mesh_path: Path to input mesh
+        output_obj_path: Path to output OBJ
+        symmetry_x: Whether to apply symmetry on X axis
+        symmetry_y: Whether to apply symmetry on Y axis
+        symmetry_z: Whether to apply symmetry on Z axis
+        tolerance: Tolerance for symmetry operations
+        
+    Returns:
+        Path: Path to preprocessed OBJ
+    """
     from .bpy_subprocess import preprocess_obj_with_symmetry_with_bpy_subprocess
 
     return preprocess_obj_with_symmetry_with_bpy_subprocess(
@@ -369,6 +500,19 @@ def postprocess_obj_with_symmetry_with_bpy(
     symmetry_z: bool,
     tolerance: float = 1e-5,
 ) -> Path:
+    """Postprocess OBJ with symmetry using Blender.
+    
+    Args:
+        mesh_path: Path to input mesh
+        output_obj_path: Path to output OBJ
+        symmetry_x: Whether to apply symmetry on X axis
+        symmetry_y: Whether to apply symmetry on Y axis
+        symmetry_z: Whether to apply symmetry on Z axis
+        tolerance: Tolerance for symmetry operations
+        
+    Returns:
+        Path: Path to postprocessed OBJ
+    """
     from .bpy_subprocess import postprocess_obj_with_symmetry_with_bpy_subprocess
 
     return postprocess_obj_with_symmetry_with_bpy_subprocess(
