@@ -62,7 +62,7 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
                 IO.AnyType.Output(display_name="mesh_artifact", tooltip="Output in-memory mesh artifact"),
                 IO.String.Output(display_name="sharp_features_path", tooltip="Sharp features file path"),
                 IO.AnyType.Output(display_name="sharp_artifact", tooltip="Output in-memory sharp artifact"),
-                IO.String.Output(display_name="mesh_stats_markdown", tooltip="Input and output mesh stats in markdown format"),
+                IO.String.Output(display_name="mesh_info", tooltip="Input and output mesh stats in markdown format"),
             ],
         )
 
@@ -91,7 +91,7 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
             mesh_artifact,
             sharp_path,
             sharp_artifact,
-            mesh_stats_markdown,
+            mesh_info,
         ) = preprocess_mesh_input(
             input_mesh,
             backend=backend,
@@ -116,5 +116,5 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
             mesh_artifact,
             sharp_path,
             sharp_artifact,
-            mesh_stats_markdown,
+            mesh_info,
         )

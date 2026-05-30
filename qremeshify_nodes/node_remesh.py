@@ -23,6 +23,8 @@ from .load_3d_input import (
 )
 from .mesh_io import parse_float_list, prepare_output_workspace, prepare_workspace
 
+DEFAULT_HIGH_POLY_FACE_LIMIT = 150000
+
 
 class QRemeshifyOBJ(IO.ComfyNode):
     """QRemeshify OBJ remesh node for ComfyUI."""
@@ -36,6 +38,7 @@ class QRemeshifyOBJ(IO.ComfyNode):
             description="Remesh an OBJ file using QRemeshify to create a high-quality quad mesh with optional smoothing and sharp feature preservation. "
             "The remeshed mesh is saved as an OBJ file and can be used for further processing. It is recommended to preprocess the mesh before remeshing. "
             "High polygon count meshes may take a long time to process or outright fail. Decimation is highly recommended for such meshes. "
+            "This node includes a high-poly guard that can be overridden at the user's risk. "
             "If the remeshing fails, try reducing the target face count or simplifying the mesh first. "
             "Supplying sharp features is not required but can help preserve important details during remeshing.",
             inputs=[
@@ -111,6 +114,19 @@ class QRemeshifyOBJ(IO.ComfyNode):
                 ),
                 IO.AnyType.Input("mesh_artifact", tooltip="In-memory mesh artifact"),
                 IO.AnyType.Input("sharp_artifact", tooltip="In-memory sharp artifact"),
+                IO.Int.Input(
+                    "high_poly_face_limit",
+                    default=DEFAULT_HIGH_POLY_FACE_LIMIT,
+                    min=0,
+                    max=50000000,
+                    step=1,
+                    tooltip="Face-count guard for remeshing. If the input mesh exceeds this many faces, remeshing stops and suggests decimation in QRemeshify Preprocess Mesh. Set to 0 to disable the threshold.",
+                ),
+                IO.Boolean.Input(
+                    "ignore_high_poly_guard",
+                    default=False,
+                    tooltip="Ignore the high-poly face-count guard and continue remeshing at your own risk.",
+                ),
                 IO.Boolean.Input("use_cache", default=False, tooltip="Use cache for remeshing"),
                 IO.String.Input("sharp_features_path", default="", tooltip="Path to sharp features file"),
                 IO.String.Input(
@@ -165,6 +181,8 @@ class QRemeshifyOBJ(IO.ComfyNode):
         satsuma_config,
         mesh_artifact: QRemeshifyMeshArtifact | None = None,
         sharp_artifact: QRemeshifySharpArtifact | None = None,
+        high_poly_face_limit=DEFAULT_HIGH_POLY_FACE_LIMIT,
+        ignore_high_poly_guard=False,
         use_cache=False,
         sharp_features_path="",
         callback_time_limit="3,5,10,20,30,60,90,120",
@@ -207,6 +225,20 @@ class QRemeshifyOBJ(IO.ComfyNode):
         else:
             raise QRemeshifyError(
                 "QRemeshify OBJ requires either input_obj or mesh_artifact"
+            )
+
+        input_vertices, input_faces = parse_obj_payload(str(working_obj))
+        face_count = len(input_faces)
+        if (
+            int(high_poly_face_limit) > 0
+            and face_count > int(high_poly_face_limit)
+            and not ignore_high_poly_guard
+        ):
+            raise QRemeshifyError(
+                "Input mesh exceeds the high-poly guard for QRemeshify OBJ "
+                f"({face_count} faces > {int(high_poly_face_limit)} limit). "
+                "Decimate the mesh first with QRemeshify Preprocess Mesh, or set "
+                "ignore_high_poly_guard=true to continue at your own risk."
             )
 
         backend = QuadwildBackend(working_obj)
@@ -278,7 +310,12 @@ class QRemeshifyOBJ(IO.ComfyNode):
             source_path=str(working_obj),
             backend="QREMESHIFY",
             label=Path(final_path).stem,
-            metadata={"stage": "final"},
+            metadata={
+                "stage": "final",
+                "input_face_count": str(face_count),
+                "high_poly_face_limit": str(int(high_poly_face_limit)),
+                "ignore_high_poly_guard": str(bool(ignore_high_poly_guard)).lower(),
+            },
         )
         remeshed_mesh_artifact = build_mesh_artifact(
             obj_path=str(backend.remeshed_path),

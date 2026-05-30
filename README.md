@@ -90,6 +90,8 @@ Inputs:
 - `sharp_features_path` optional
 - `mesh_artifact` optional
 - `sharp_artifact` optional
+- `high_poly_face_limit`: face-count guard before QuadWild remeshing
+- `ignore_high_poly_guard`: bypass the guard at your own risk
 - `use_cache`: reuse previously generated traced intermediates and rerun only quadrangulation
 - `callback_time_limit`: eight comma-separated callback thresholds
 - `callback_gap_limit`: eight comma-separated callback thresholds
@@ -117,6 +119,7 @@ Wire them like this:
 - `sharp_artifact` -> `sharp_artifact`
 
 This is the preferred workflow because the preprocess node writes the normalized triangle OBJ internally, and the `.sharp` file indices must match the exact OBJ consumed by the backend.
+It is also the recommended place to decimate high-poly meshes before invoking the native QuadWild remeshing stages.
 
 Optional utility workflow:
 
@@ -269,6 +272,16 @@ Common pattern:
 - `TRIMESH` decimation depends on trimesh's quadric-decimation support being installed and working in the active Python environment, which typically requires `fast-simplification`
 - `.rosy` and the native tracing/quadrangulation stages remain file-backed internally
 - All dependencies must be installed under ComfyUI's python environment.
+
+# High-Poly Guard
+`QRemeshify OBJ` includes a face-count guard before it enters the native QuadWild pipeline.
+
+Behavior:
+- if the input mesh face count exceeds `high_poly_face_limit`, the node stops and tells you to decimate with `QRemeshify Preprocess Mesh`
+- set `ignore_high_poly_guard=true` to bypass the guard at your own risk
+- set `high_poly_face_limit=0` to disable the threshold entirely
+
+This guard exists because very high-poly meshes can make QuadWild extremely slow or cause native failures. The preferred fix is to decimate first in `QRemeshify Preprocess Mesh`.
 
 # Tips
 - Keep meshes reasonably sized; remeshing cost grows quickly with mesh complexity

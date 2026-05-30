@@ -23,7 +23,7 @@
 
 ## Remaining Audit / Hardening
 - [ ] Audit Blender-backed preprocessing against addon edge cases like modifiers, shapekeys, and multi-object imports.
-- [ ] Add a high-poly guard in `QRemeshify Preprocess Mesh` before invoking downstream QuadWild stages, with configurable face-count thresholds and clear user-facing errors/warnings.
+- [x] Add a high-poly guard in `QRemeshify OBJ` before invoking downstream QuadWild stages, with configurable face-count thresholds and clear user-facing errors/warnings.
 - [ ] Add an optional high-poly decimation fallback in `QRemeshify Preprocess Mesh` that can reduce face count before `QRemeshify OBJ` runs.
 - [ ] Add face/vertex count reporting to preprocessing/remesh metadata so guard decisions and decimation results are visible to users.
 
