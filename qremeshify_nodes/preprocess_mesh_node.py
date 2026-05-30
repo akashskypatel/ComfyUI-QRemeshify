@@ -27,7 +27,7 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
                 ),
                 IO.Combo.Input(
                     "backend",
-                    options=["AUTO", "BPY", "TRIMESH"],
+                    options=["AUTO", "BPY", "LIBIGL", "TRIMESH"],
                     default="AUTO",
                 ),
                 IO.Boolean.Input("symmetry_x", default=False),
@@ -36,6 +36,7 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
                 IO.Boolean.Input("decimate_enabled", default=False),
                 IO.Int.Input("decimate_target_faces", default=0, min=0, max=50000000, step=1),
                 IO.Float.Input("decimate_ratio", default=1.0, min=0.0, max=1.0, step=0.001),
+                IO.Boolean.Input("allow_backend_fallback", default=False),
                 IO.Boolean.Input("generate_sharp", default=False),
                 IO.Float.Input("sharp_angle", default=35.0, min=0.0, max=180.0, step=0.1),
                 IO.Combo.Input(
@@ -67,6 +68,7 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
         decimate_enabled=False,
         decimate_target_faces=0,
         decimate_ratio=1.0,
+        allow_backend_fallback=False,
         generate_sharp=False,
         sharp_angle=35.0,
         sharp_backend="AUTO",
@@ -85,6 +87,7 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
             decimate_enabled=decimate_enabled,
             decimate_target_faces=decimate_target_faces,
             decimate_ratio=decimate_ratio,
+            allow_backend_fallback=allow_backend_fallback,
             generate_sharp=generate_sharp,
             sharp_angle=sharp_angle,
             sharp_backend=sharp_backend,

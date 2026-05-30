@@ -30,9 +30,10 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
                 ),
                 IO.Combo.Input(
                     "backend",
-                    options=["AUTO", "BPY", "TRIMESH"],
+                    options=["AUTO", "BPY", "LIBIGL", "TRIMESH"],
                     default="AUTO",
                 ),
+                IO.Boolean.Input("allow_backend_fallback", default=False),
                 IO.String.Input("output_dir", default=""),
                 IO.String.Input("output_prefix", default=""),
             ],
@@ -48,6 +49,7 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
         cls,
         input_mesh,
         backend="AUTO",
+        allow_backend_fallback=False,
         output_dir="",
         output_prefix="",
         **kwargs,
@@ -55,6 +57,7 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
         output_obj_path, workspace_dir, mesh_artifact, _, _ = preprocess_mesh_input(
             input_mesh,
             backend=backend,
+            allow_backend_fallback=allow_backend_fallback,
             output_dir=output_dir,
             output_prefix=output_prefix,
         )
