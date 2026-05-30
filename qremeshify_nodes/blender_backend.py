@@ -16,8 +16,8 @@ def bpy_available() -> bool:
 
 def _require_bpy():
     try:
-        import bmesh
         import bpy
+        import bmesh
         import mathutils
     except ImportError as exc:  # pragma: no cover - depends on local environment
         raise QRemeshifyError(
@@ -297,6 +297,32 @@ def normalize_mesh_to_obj_with_bpy(mesh_path: Path, output_obj_path: Path) -> Pa
     from .bpy_subprocess import normalize_mesh_to_obj_with_bpy_subprocess
 
     return normalize_mesh_to_obj_with_bpy_subprocess(mesh_path, output_obj_path)
+
+
+def preprocess_mesh_with_bpy(
+    mesh_path: Path,
+    output_obj_path: Path,
+    symmetry_x: bool = False,
+    symmetry_y: bool = False,
+    symmetry_z: bool = False,
+    decimate_enabled: bool = False,
+    decimate_target_faces: int = 0,
+    decimate_ratio: float = 1.0,
+    tolerance: float = 1e-5,
+) -> Path:
+    from .bpy_subprocess import preprocess_mesh_with_bpy_subprocess
+
+    return preprocess_mesh_with_bpy_subprocess(
+        mesh_path,
+        output_obj_path,
+        symmetry_x=symmetry_x,
+        symmetry_y=symmetry_y,
+        symmetry_z=symmetry_z,
+        decimate_enabled=decimate_enabled,
+        decimate_target_faces=decimate_target_faces,
+        decimate_ratio=decimate_ratio,
+        tolerance=tolerance,
+    )
 
 
 def preprocess_obj_with_symmetry_with_bpy(

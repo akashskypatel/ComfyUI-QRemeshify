@@ -7,6 +7,7 @@ from .qremeshify_nodes.bpy_smoke_test_node import QRemeshifyBpySmokeTest
 from .qremeshify_nodes import (
     QRemeshifyGenerateSharpFeatures,
     QRemeshifyMeshToOBJ,
+    QRemeshifyPreprocessMesh,
     QRemeshifyOBJ,
 )
 
@@ -18,6 +19,7 @@ class QRemeshifyExtension(ComfyExtension):
             QRemeshifyBpySmokeTest,
             QRemeshifyGenerateSharpFeatures,
             QRemeshifyMeshToOBJ,
+            QRemeshifyPreprocessMesh,
             QRemeshifyOBJ,
         ]
 

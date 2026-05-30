@@ -41,10 +41,15 @@ def _run_bpy_subprocess(payload: dict) -> dict:
     stderr = (completed.stderr or "").strip()
     response = None
     if stdout:
-        try:
-            response = json.loads(stdout)
-        except json.JSONDecodeError:
-            response = None
+        for line in reversed(stdout.splitlines()):
+            candidate = line.strip()
+            if not candidate.startswith("{"):
+                continue
+            try:
+                response = json.loads(candidate)
+                break
+            except json.JSONDecodeError:
+                continue
 
     if completed.returncode != 0:
         error_message = None
@@ -68,7 +73,7 @@ def _run_bpy_subprocess(payload: dict) -> dict:
 @lru_cache(maxsize=1)
 def bpy_available_via_subprocess() -> bool:
     try:
-        _run_bpy_subprocess({"operation": "probe", "probe_level": "IMPORT_ONLY"})
+        _run_bpy_subprocess({"operation": "probe", "probe_level": "BMESH"})
     except Exception:
         return False
     return True
@@ -107,6 +112,34 @@ def preprocess_obj_with_symmetry_with_bpy_subprocess(
             "symmetry_x": symmetry_x,
             "symmetry_y": symmetry_y,
             "symmetry_z": symmetry_z,
+            "tolerance": tolerance,
+        }
+    )
+    return output_obj_path
+
+
+def preprocess_mesh_with_bpy_subprocess(
+    mesh_path: Path,
+    output_obj_path: Path,
+    symmetry_x: bool = False,
+    symmetry_y: bool = False,
+    symmetry_z: bool = False,
+    decimate_enabled: bool = False,
+    decimate_target_faces: int = 0,
+    decimate_ratio: float = 1.0,
+    tolerance: float = 1e-5,
+) -> Path:
+    _run_bpy_subprocess(
+        {
+            "operation": "preprocess_mesh",
+            "mesh_path": str(mesh_path),
+            "output_obj_path": str(output_obj_path),
+            "symmetry_x": symmetry_x,
+            "symmetry_y": symmetry_y,
+            "symmetry_z": symmetry_z,
+            "decimate_enabled": decimate_enabled,
+            "decimate_target_faces": decimate_target_faces,
+            "decimate_ratio": decimate_ratio,
             "tolerance": tolerance,
         }
     )
@@ -155,12 +188,13 @@ def postprocess_obj_with_symmetry_with_bpy_subprocess(
 
 def _require_bpy():
     try:
-        import bmesh
         import bpy
+        import bmesh
         import mathutils
     except ImportError as exc:  # pragma: no cover - depends on local environment
         raise QRemeshifyError(
-            "backend='BPY' requires Blender's Python modules to be installed and importable"
+            "backend='BPY' requires Blender's Python modules to be installed and importable: "
+            f"{exc}"
         ) from exc
     return bpy, bmesh, mathutils
 
@@ -432,6 +466,57 @@ def _write_sharp_file_from_bmesh(bm, sharp_angle: float, output_path: Path) -> P
     return output_path
 
 
+def _decimation_ratio(current_faces: int, target_faces: int, ratio: float) -> float:
+    resolved_ratio = max(0.0, min(1.0, float(ratio)))
+    if target_faces > 0 and current_faces > 0:
+        resolved_ratio = min(resolved_ratio, float(target_faces) / float(current_faces))
+    return max(0.0, min(1.0, resolved_ratio))
+
+
+def _decimate_bmesh(bm, target_faces: int, ratio: float):
+    bpy, bmesh, _ = _require_bpy()
+    current_faces = len(bm.faces)
+    resolved_ratio = _decimation_ratio(current_faces, target_faces, ratio)
+    if resolved_ratio >= 0.999999:
+        return bm
+
+    temp_mesh = bpy.data.meshes.new(name="QRemeshifyDecimateMesh")
+    temp_obj = bpy.data.objects.new("QRemeshifyDecimateObject", temp_mesh)
+    bpy.context.scene.collection.objects.link(temp_obj)
+    decimated_bm = None
+    try:
+        bm.to_mesh(temp_mesh)
+        modifier = temp_obj.modifiers.new(name="QRemeshifyDecimate", type="DECIMATE")
+        modifier.decimate_type = "COLLAPSE"
+        modifier.ratio = resolved_ratio
+        if hasattr(modifier, "use_collapse_triangulate"):
+            modifier.use_collapse_triangulate = True
+
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        evaluated_obj = temp_obj.evaluated_get(depsgraph)
+        evaluated_mesh = evaluated_obj.to_mesh()
+        try:
+            decimated_bm = bmesh.new()
+            decimated_bm.from_mesh(evaluated_mesh)
+        finally:
+            evaluated_obj.to_mesh_clear()
+    finally:
+        bpy.data.objects.remove(temp_obj, do_unlink=True)
+        bpy.data.meshes.remove(temp_mesh)
+
+    bmesh.ops.triangulate(
+        decimated_bm,
+        faces=decimated_bm.faces,
+        quad_method="SHORT_EDGE",
+        ngon_method="BEAUTY",
+    )
+    decimated_bm.faces.ensure_lookup_table()
+    decimated_bm.edges.ensure_lookup_table()
+    decimated_bm.verts.ensure_lookup_table()
+    bm.free()
+    return decimated_bm
+
+
 def _run_probe(probe_level: str) -> dict:
     details = ["Imported bpy successfully"]
     import bpy
@@ -511,6 +596,37 @@ def _dispatch_worker(payload: dict) -> dict:
                 payload["symmetry_z"],
                 payload.get("tolerance", 1e-5),
             )
+            _write_bmesh_obj(bm, output_obj_path)
+        finally:
+            if bm is not None:
+                bm.free()
+            _cleanup_imported_objects(bpy, imported_objects)
+        return {"output_obj_path": str(output_obj_path)}
+    if operation == "preprocess_mesh":
+        mesh_path = Path(payload["mesh_path"])
+        output_obj_path = Path(payload["output_obj_path"])
+        bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
+        bm = None
+        try:
+            bm = _build_bmesh_from_objects(imported_objects)
+            if (
+                payload["symmetry_x"]
+                or payload["symmetry_y"]
+                or payload["symmetry_z"]
+            ):
+                _apply_symmetry_preprocess_to_bmesh(
+                    bm,
+                    payload["symmetry_x"],
+                    payload["symmetry_y"],
+                    payload["symmetry_z"],
+                    payload.get("tolerance", 1e-5),
+                )
+            if payload.get("decimate_enabled") or payload.get("decimate_target_faces", 0) > 0:
+                bm = _decimate_bmesh(
+                    bm,
+                    int(payload.get("decimate_target_faces", 0)),
+                    float(payload.get("decimate_ratio", 1.0)),
+                )
             _write_bmesh_obj(bm, output_obj_path)
         finally:
             if bm is not None:

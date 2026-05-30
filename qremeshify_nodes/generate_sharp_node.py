@@ -78,7 +78,7 @@ class QRemeshifyGenerateSharpFeatures(IO.ComfyNode):
             resolved_backend = "BPY" if bpy_available() else "LIBIGL"
         normalization_backend = "BPY" if resolved_backend == "BPY" else "TRIMESH"
         normalized_obj_path, workspace_dir, normalized_mesh_artifact = (
-            QRemeshifyMeshToOBJ().convert(
+            QRemeshifyMeshToOBJ.execute(
                 input_mesh,
                 backend=normalization_backend,
                 output_dir=output_dir,
