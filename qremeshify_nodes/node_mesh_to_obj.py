@@ -57,7 +57,7 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
         output_prefix="",
         **kwargs,
     ) -> IO.NodeOutput:
-        output_obj_path, workspace_dir, mesh_artifact, _, _ = preprocess_mesh_input(
+        output_obj_path, workspace_dir, mesh_artifact, _, _, _ = preprocess_mesh_input(
             input_mesh,
             backend=backend,
             allow_backend_fallback=allow_backend_fallback,

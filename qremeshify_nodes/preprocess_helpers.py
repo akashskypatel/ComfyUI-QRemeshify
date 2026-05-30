@@ -88,6 +88,45 @@ def extract_mesh_arrays(mesh_value):
     return np.asarray(vertices, dtype=np.float64), np.asarray(faces, dtype=np.int64)
 
 
+def count_unique_edges(faces: np.ndarray | list[list[int]]) -> int:
+    """Count unique undirected edges from triangle faces."""
+    if len(faces) == 0:
+        return 0
+    face_array = np.asarray(faces, dtype=np.int64)
+    edges: set[tuple[int, int]] = set()
+    for face in face_array:
+        a, b, c = int(face[0]), int(face[1]), int(face[2])
+        edges.add(tuple(sorted((a, b))))
+        edges.add(tuple(sorted((b, c))))
+        edges.add(tuple(sorted((c, a))))
+    return len(edges)
+
+
+def build_mesh_stats(vertices, faces) -> dict[str, int]:
+    """Build basic mesh stats for vertices, faces, and edges."""
+    return {
+        "vertex_count": int(len(vertices)),
+        "face_count": int(len(faces)),
+        "edge_count": int(count_unique_edges(faces)),
+    }
+
+
+def format_mesh_stats_markdown(
+    input_stats: dict[str, int], output_stats: dict[str, int]
+) -> str:
+    """Format mesh stats as markdown."""
+    return "\n".join(
+        [
+            "## Mesh Stats",
+            "",
+            "| Mesh | Vertices | Faces | Edges |",
+            "| --- | ---: | ---: | ---: |",
+            f"| Input | {input_stats['vertex_count']} | {input_stats['face_count']} | {input_stats['edge_count']} |",
+            f"| Output | {output_stats['vertex_count']} | {output_stats['face_count']} | {output_stats['edge_count']} |",
+        ]
+    )
+
+
 def libigl_available() -> bool:
     """Check if libigl is available.
     
@@ -434,6 +473,7 @@ def preprocess_mesh_input(
                 "Decimation requires backend='BPY', backend='LIBIGL', or backend='TRIMESH' unless backend fallback is enabled"
             )
 
+    input_stats: dict[str, int] | None = None
     metadata = {
         "input_kind": input_kind,
         "preprocessed": "true",
@@ -454,6 +494,7 @@ def preprocess_mesh_input(
 
     if input_kind == "mesh":
         vertices, faces = extract_mesh_arrays(input_mesh)
+        input_stats = build_mesh_stats(vertices, faces)
         if resolved_backend == "BPY" and (symmetry_requested or decimate_requested):
             source_mesh = workspace_dir / f"{stem}_source.obj"
             write_triangle_obj(source_mesh, vertices, faces)
@@ -521,6 +562,8 @@ def preprocess_mesh_input(
             write_triangle_obj(output_obj_path, vertices, faces)
             vertices, faces = mesh_arrays_to_lists(vertices, faces)
     elif resolved_backend == "BPY":
+        input_vertices, input_faces = load_triangle_mesh_with_trimesh(source_mesh)
+        input_stats = build_mesh_stats(input_vertices, input_faces)
         preprocess_mesh_with_bpy(
             source_mesh,
             output_obj_path,
@@ -534,6 +577,7 @@ def preprocess_mesh_input(
         vertices, faces = parse_obj_payload(str(output_obj_path))
     elif resolved_backend == "LIBIGL":
         vertices, faces = load_triangle_mesh_with_libigl(source_mesh)
+        input_stats = build_mesh_stats(vertices, faces)
         if decimate_requested:
             edge_manifold, vertex_manifold = inspect_libigl_manifold(faces)
             if not (edge_manifold and vertex_manifold):
@@ -570,6 +614,7 @@ def preprocess_mesh_input(
             vertices, faces = mesh_arrays_to_lists(vertices, faces)
     elif resolved_backend == "TRIMESH":
         vertices, faces = load_triangle_mesh_with_trimesh(source_mesh)
+        input_stats = build_mesh_stats(vertices, faces)
         if decimate_requested:
             vertices, faces, decimate_reached_target, decimate_target_resolved = (
                 decimate_mesh_with_trimesh(
@@ -584,8 +629,15 @@ def preprocess_mesh_input(
     else:
         raise QRemeshifyError(f"Unsupported preprocessing backend: {resolved_backend}")
 
-    metadata["face_count"] = str(len(faces))
-    metadata["vertex_count"] = str(len(vertices))
+    output_stats = build_mesh_stats(vertices, faces)
+    if input_stats is None:
+        input_stats = output_stats
+    metadata["face_count"] = str(output_stats["face_count"])
+    metadata["vertex_count"] = str(output_stats["vertex_count"])
+    metadata["edge_count"] = str(output_stats["edge_count"])
+    metadata["input_face_count"] = str(input_stats["face_count"])
+    metadata["input_vertex_count"] = str(input_stats["vertex_count"])
+    metadata["input_edge_count"] = str(input_stats["edge_count"])
     metadata["resolved_backend"] = resolved_backend
     metadata["backend_fallback_used"] = str(bool(backend_fallback_used)).lower()
     metadata["decimate_backend"] = resolved_backend if decimate_requested else "NONE"
@@ -661,5 +713,12 @@ def preprocess_mesh_input(
                 "source_backend": resolved_sharp_backend,
             },
         )
-
-    return output_obj_path, workspace_dir, mesh_artifact, sharp_path, sharp_artifact
+    stats_markdown = format_mesh_stats_markdown(input_stats, output_stats)
+    return (
+        output_obj_path,
+        workspace_dir,
+        mesh_artifact,
+        sharp_path,
+        sharp_artifact,
+        stats_markdown,
+    )
