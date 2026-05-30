@@ -8,10 +8,11 @@
 - [x] Add native in-memory ComfyUI mesh/sharp artifact datatypes so nodes can pass richer geometry objects instead of only bare path strings.
 - [x] Add optional `vertices` / `faces` payloads to `QREMESHIFY_MESH` artifacts while preserving current path-backed behavior.
 - [x] Add optional parsed feature-row payloads to `QREMESHIFY_SHARP` artifacts while preserving current path-backed behavior.
-- [x] Populate those in-memory payloads in `QRemeshify Mesh To OBJ` and `QRemeshify Generate Sharp Features`.
+- [x] Populate those in-memory payloads in `QRemeshify Mesh To OBJ` and `QRemeshify Preprocess Mesh`.
 - [x] Make `QRemeshify OBJ` prefer in-memory artifact payloads and only materialize OBJ / `.sharp` files at the native backend boundary.
 - [x] Parse final/remeshed/traced OBJ outputs back into in-memory mesh payloads for returned mesh artifacts.
 - [x] Remove the remaining non-runtime `QRemeshify` reference artifacts.
+- [x] Refactor all mesh preprocessing into a dedicated `QRemeshify Preprocess Mesh` node, including normalization, symmetry operations, optional decimation, and sharp-feature generation.
 
 ## Testing And Validation
 - [x] Validate the `bpy` path end-to-end inside ComfyUI's active Python environment.
@@ -22,8 +23,8 @@
 
 ## Remaining Audit / Hardening
 - [ ] Audit Blender-backed preprocessing against addon edge cases like modifiers, shapekeys, and multi-object imports.
-- [ ] Add a high-poly guard in `QRemeshify OBJ` before invoking QuadWild, with configurable face-count thresholds and clear user-facing errors/warnings.
-- [ ] Add an optional `DECIMATE_BPY` high-poly fallback in `QRemeshify OBJ` that uses the Blender subprocess path to reduce face count before QuadWild runs.
+- [ ] Add a high-poly guard in `QRemeshify Preprocess Mesh` before invoking downstream QuadWild stages, with configurable face-count thresholds and clear user-facing errors/warnings.
+- [ ] Add an optional high-poly decimation fallback in `QRemeshify Preprocess Mesh` that can reduce face count before `QRemeshify OBJ` runs.
 - [ ] Add face/vertex count reporting to preprocessing/remesh metadata so guard decisions and decimation results are visible to users.
 
 ## Documentation
@@ -31,7 +32,6 @@
 
 ## Future Backlog
 - [ ] Add progress-percentage reporting to all nodes that can expose meaningful runtime progress.
-- [ ] Refactor all mesh preprocessing into a dedicated `PreprocessMesh` node, including normalization, symmetry operations, and optional Blender-based decimation.
 - [ ] Expose additional native methods from `third_party/quadwild` through the Python wrapper for better preprocessing, diagnostics, and future guard rails.
 - [ ] Optional future: expose mirrored/full-mesh variants for intermediate outputs only if later debugging needs justify it. Current decision is to keep half-mesh intermediates authoritative.
 - [ ] Optional future: add a dedicated debug/intermediate-output helper workflow or node if real debugging usage shows the current returned file paths are insufficient.

@@ -16,12 +16,34 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
             node_id="QRemeshifyPreprocessMesh",
             display_name="QRemeshify Preprocess Mesh",
             category=NODE_CATEGORY,
+            description="Normalize and optionally preprocess a mesh before remeshing.\n"
+            "Inputs: input_mesh - Mesh file to preprocess\n"
+            "       backend - Backend to use for mesh processing\n"
+            "       symmetry_x - Apply symmetry along X axis\n"
+            "       symmetry_y - Apply symmetry along Y axis\n"
+            "       symmetry_z - Apply symmetry along Z axis\n"
+            "       decimate_enabled - Enable decimation\n"
+            "       decimate_target_faces - Target number of faces after decimation\n"
+            "       decimate_ratio - Decimation ratio\n"
+            "       allow_backend_fallback - Allow backend fallback\n"
+            "       generate_sharp - Generate sharp features\n"
+            "       sharp_angle - Sharp angle threshold\n"
+            "       sharp_backend - Backend to use for sharp feature detection\n"
+            "       output_dir - Output directory for processed files\n"
+            "       output_prefix - Prefix for output filenames\n"
+            "Outputs: output_obj - Output OBJ mesh file path\n"
+            "       workspace_dir - Workspace directory path\n"
+            "       model_3d - Output 3D model file in '3d' directory\n"
+            "       mesh_artifact - Output in-memory mesh artifact\n"
+            "       sharp_features_path - Sharp features file path\n"
+            "       sharp_artifact - Output in-memory sharp artifact",
             inputs=[
                 IO.MultiType.Input(
                     IO.Combo.Input(
                         "input_mesh",
                         options=["none"] + sorted(list_input_3d_files(SUPPORTED_3D_SUFFIXES)),
                         upload=IO.UploadType.model,
+                        tooltip="Select a mesh file to preprocess",
                     ),
                     [IO.File3DAny, IO.Mesh],
                 ),
@@ -29,31 +51,33 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
                     "backend",
                     options=["AUTO", "BPY", "LIBIGL", "TRIMESH"],
                     default="AUTO",
+                    tooltip="Backend to use for mesh processing",
                 ),
-                IO.Boolean.Input("symmetry_x", default=False),
-                IO.Boolean.Input("symmetry_y", default=False),
-                IO.Boolean.Input("symmetry_z", default=False),
-                IO.Boolean.Input("decimate_enabled", default=False),
-                IO.Int.Input("decimate_target_faces", default=0, min=0, max=50000000, step=1),
-                IO.Float.Input("decimate_ratio", default=1.0, min=0.0, max=1.0, step=0.001),
-                IO.Boolean.Input("allow_backend_fallback", default=False),
-                IO.Boolean.Input("generate_sharp", default=False),
-                IO.Float.Input("sharp_angle", default=35.0, min=0.0, max=180.0, step=0.1),
+                IO.Boolean.Input("symmetry_x", default=False, tooltip="Apply symmetry along X axis"),
+                IO.Boolean.Input("symmetry_y", default=False, tooltip="Apply symmetry along Y axis"),
+                IO.Boolean.Input("symmetry_z", default=False, tooltip="Apply symmetry along Z axis"),
+                IO.Boolean.Input("decimate_enabled", default=False, tooltip="Enable decimation"),
+                IO.Int.Input("decimate_target_faces", default=0, min=0, max=50000000, step=1, tooltip="Target number of faces after decimation"),
+                IO.Float.Input("decimate_ratio", default=1.0, min=0.0, max=1.0, step=0.001, tooltip="Decimation ratio"),
+                IO.Boolean.Input("allow_backend_fallback", default=False, tooltip="Allow backend fallback"),
+                IO.Boolean.Input("generate_sharp", default=False, tooltip="Generate sharp features"),
+                IO.Float.Input("sharp_angle", default=35.0, min=0.0, max=180.0, step=0.1, tooltip="Sharp angle threshold"),
                 IO.Combo.Input(
                     "sharp_backend",
                     options=["AUTO", "BPY", "LIBIGL", "TRIMESH"],
                     default="AUTO",
+                    tooltip="Backend to use for sharp feature detection",
                 ),
-                IO.String.Input("output_dir", default=""),
-                IO.String.Input("output_prefix", default=""),
+                IO.String.Input("output_dir", default="", tooltip="Output directory for processed files"),
+                IO.String.Input("output_prefix", default="", tooltip="Prefix for output filenames"),
             ],
             outputs=[
-                IO.String.Output(display_name="output_obj"),
-                IO.String.Output(display_name="workspace_dir"),
-                IO.File3DAny.Output(display_name="model_3d"),
-                IO.AnyType.Output(display_name="mesh_artifact"),
-                IO.String.Output(display_name="sharp_features_path"),
-                IO.AnyType.Output(display_name="sharp_artifact"),
+                IO.String.Output(display_name="output_obj", tooltip="Output OBJ mesh file path"),
+                IO.String.Output(display_name="workspace_dir", tooltip="Workspace directory path"),
+                IO.File3DAny.Output(display_name="model_3d", tooltip="Output 3D model file in '3d' directory"),
+                IO.AnyType.Output(display_name="mesh_artifact", tooltip="Output in-memory mesh artifact"),
+                IO.String.Output(display_name="sharp_features_path", tooltip="Sharp features file path"),
+                IO.AnyType.Output(display_name="sharp_artifact", tooltip="Output in-memory sharp artifact"),
             ],
         )
 

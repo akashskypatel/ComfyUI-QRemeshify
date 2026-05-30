@@ -28,20 +28,29 @@ class QRemeshifyLoad3D(IO.ComfyNode):
             node_id="QRemeshifyLoad3D",
             display_name="QRemeshify Load 3D",
             category=NODE_CATEGORY,
+            description="Loads 3D files from the '3d' input directory.\n"
+            "Inputs: model_file - Select a 3D model file to load\n"
+            "       image - Image input for 3D processing\n"
+            "       width - Width for 3D processing\n"
+            "       height - Height for 3D processing\n"
+            "Outputs: mesh_path - Path to the loaded mesh\n"
+            "       model_3d - Loaded 3D model file from '3d' directory\n"
+            "       mesh_artifact - Mesh artifact for downstream nodes",
             inputs=[
                 IO.Combo.Input(
                     "model_file",
                     options=["none"] + sorted(files),
                     upload=IO.UploadType.model,
+                    tooltip="Select a 3D model file to load",
                 ),
-                IO.Load3D.Input("image"),
-                IO.Int.Input("width", default=1024, min=1, max=4096, step=1),
-                IO.Int.Input("height", default=1024, min=1, max=4096, step=1),
+                IO.Load3D.Input("image", tooltip="Image input for 3D processing"),
+                IO.Int.Input("width", default=1024, min=1, max=4096, step=1, tooltip="Width for 3D processing"),
+                IO.Int.Input("height", default=1024, min=1, max=4096, step=1, tooltip="Height for 3D processing"),
             ],
             outputs=[
-                IO.String.Output(display_name="mesh_path"),
-                IO.File3DAny.Output(display_name="model_3d"),
-                IO.AnyType.Output(display_name="mesh_artifact")
+                IO.String.Output(display_name="mesh_path", tooltip="Path to the loaded mesh"),
+                IO.File3DAny.Output(display_name="model_3d", tooltip="Loaded 3D model file"),
+                IO.AnyType.Output(display_name="mesh_artifact", tooltip="Mesh artifact for downstream nodes")
             ],
         )
 

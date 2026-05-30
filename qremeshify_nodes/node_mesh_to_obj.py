@@ -19,12 +19,22 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
             node_id="QRemeshifyMeshToOBJ",
             display_name="QRemeshify Mesh to OBJ",
             category=NODE_CATEGORY,
+            description="Convert a mesh file to an OBJ suitable for downstream nodes.\n"
+            "Inputs: input_mesh - Mesh file to convert\n"
+            "       backend - Backend to use for mesh processing\n"
+            "       allow_backend_fallback - Allow backend fallback\n"
+            "       output_dir - Output directory for converted files\n"
+            "       output_prefix - Prefix for output filenames\n"
+            "Outputs: output_obj - Output OBJ mesh file path\n"
+            "       workspace_dir - Workspace directory path\n"
+            "       mesh_artifact - Output in-memory mesh artifact",
             inputs=[
                 IO.MultiType.Input(
                     IO.Combo.Input(
                         "input_mesh",
                         options=["none"] + sorted(list_input_3d_files(SUPPORTED_3D_SUFFIXES)),
                         upload=IO.UploadType.model,
+                        tooltip="Select a mesh file to convert",
                     ),
                     [IO.File3DAny, IO.Mesh],
                 ),
@@ -32,15 +42,16 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
                     "backend",
                     options=["AUTO", "BPY", "LIBIGL", "TRIMESH"],
                     default="AUTO",
+                    tooltip="Backend to use for mesh processing",
                 ),
-                IO.Boolean.Input("allow_backend_fallback", default=False),
-                IO.String.Input("output_dir", default=""),
-                IO.String.Input("output_prefix", default=""),
+                IO.Boolean.Input("allow_backend_fallback", default=False, tooltip="Allow backend fallback"),
+                IO.String.Input("output_dir", default="", tooltip="Output directory for converted files"),
+                IO.String.Input("output_prefix", default="", tooltip="Prefix for output filenames"),
             ],
             outputs=[
-                IO.String.Output(display_name="output_obj"),
-                IO.String.Output(display_name="workspace_dir"),
-                IO.AnyType.Output(display_name="mesh_artifact"),
+                IO.String.Output(display_name="output_obj", tooltip="Output OBJ mesh file path"),
+                IO.String.Output(display_name="workspace_dir", tooltip="Workspace directory path"),
+                IO.AnyType.Output(display_name="mesh_artifact", tooltip="Output in-memory mesh artifact"),
             ],
         )
 

@@ -33,58 +33,102 @@ class QRemeshifyOBJ(IO.ComfyNode):
             node_id="QRemeshifyOBJ",
             display_name="QRemeshify OBJ",
             category=NODE_CATEGORY,
+            description="Remesh an OBJ file using QRemeshify to create a high-quality quad mesh with optional smoothing and sharp feature preservation.\n"
+            "The remeshed mesh is saved as an OBJ file and can be used for further processing.\n"
+            "Inputs: input_obj - OBJ file to remesh\n"
+            "       smooth - Apply smoothing to the mesh\n"
+            "       sharp_angle - Sharp angle threshold for feature preservation\n"
+            "       scale_factor - Scale factor for the mesh\n"
+            "       fixed_chart_clusters - Fixed chart clusters\n"
+            "       alpha - Alpha parameter for remeshing\n"
+            "       ilp_method - ILP method for remeshing\n"
+            "       time_limit - Time limit for remeshing\n"
+            "       gap_limit - Gap limit for remeshing\n"
+            "       minimum_gap - Minimum gap for remeshing\n"
+            "       isometry - Apply isometry to the mesh\n"
+            "       regularity_quadrilaterals - Apply regularity to quadrilaterals\n"
+            "       regularity_non_quadrilaterals - Apply regularity to non-quadrilaterals\n"
+            "       regularity_non_quadrilaterals_weight - Weight for regularity of non-quadrilaterals\n"
+            "       align_singularities - Align singularities\n"
+            "       align_singularities_weight - Weight for aligning singularities\n"
+            "       repeat_losing_constraints_iterations - Number of iterations for repeating losing constraints\n"
+            "       repeat_losing_constraints_quads - Repeat losing constraints for quadrilaterals\n"
+            "       repeat_losing_constraints_non_quads - Repeat losing constraints for non-quadrilaterals\n"
+            "       repeat_losing_constraints_align - Repeat losing constraints for alignment\n"
+            "       hard_parity_constraint - Apply hard parity constraint\n"
+            "       flow_config - Flow configuration [SIMPLE, HALF]\n"
+            "       satsuma_config - Satsuma configuration [DEFAULT, MST, ROUND2EVEN, SYMMDC, EDGETHRU, LEMON, NODETHRU]\n"
+            "       mesh_artifact - In-memory mesh artifact\n"
+            "       sharp_artifact - In-memory sharp artifact\n"
+            "       use_cache - Use cache for remeshing\n"
+            "       sharp_features_path - Path to sharp features file\n"
+            "       callback_time_limit - Callback time limits\n"
+            "       callback_gap_limit - Callback gap limits\n"
+            "       output_dir - Output directory\n"
+            "Outputs: output_obj - Output OBJ file path\n"
+            "       workspace_dir - Workspace directory path\n"
+            "       remeshed_obj - Remeshed OBJ file path\n"
+            "       traced_obj - Traced OBJ file path\n"
+            "       model_3d - 3D model file saved under '3d' directory\n"
+            "       output_mesh_artifact - Output in-memory mesh artifact\n"
+            "       remeshed_mesh_artifact - Remeshed in-memory mesh artifact\n"
+            "       traced_mesh_artifact - Traced in-memory mesh artifact",
             inputs=[
                 IO.Combo.Input(
                     "input_obj",
                     options=["none"] + sorted(list_input_3d_files({".obj"})),
                     upload=IO.UploadType.model,
+                    tooltip="Select an OBJ file to remesh",
                 ),
-                IO.Boolean.Input("smooth", default=True),
+                IO.Boolean.Input("smooth", default=True, tooltip="Apply smoothing to the mesh"),
                 IO.Float.Input(
-                    "sharp_angle", default=35.0, min=0.0, max=180.0, step=0.1
+                    "sharp_angle", default=35.0, min=0.0, max=180.0, step=0.1, tooltip="Sharp angle threshold for feature preservation"
                 ),
                 IO.Float.Input(
-                    "scale_factor", default=1.0, min=0.01, max=10.0, step=0.01
+                    "scale_factor", default=1.0, min=0.01, max=10.0, step=0.01, tooltip="Scale factor for the mesh"
                 ),
                 IO.Int.Input(
-                    "fixed_chart_clusters", default=0, min=0, max=100000, step=1
+                    "fixed_chart_clusters", default=0, min=0, max=100000, step=1, tooltip="Fixed chart clusters"
                 ),
-                IO.Float.Input("alpha", default=0.005, min=0.0, max=0.999, step=0.001),
+                IO.Float.Input("alpha", default=0.005, min=0.0, max=0.999, step=0.001, tooltip="Alpha parameter for remeshing"),
                 IO.Combo.Input(
                     "ilp_method",
                     options=["LEASTSQUARES", "ABS"],
                     default="LEASTSQUARES",
+                    tooltip="ILP method for remeshing"
                 ),
-                IO.Int.Input("time_limit", default=200, min=1, max=86400, step=1),
-                IO.Float.Input("gap_limit", default=0.0, min=0.0, max=1.0, step=0.001),
+                IO.Int.Input("time_limit", default=200, min=1, max=86400, step=1, tooltip="Time limit for remeshing"),
+                IO.Float.Input("gap_limit", default=0.0, min=0.0, max=1.0, step=0.001, tooltip="Gap limit for remeshing"),
                 IO.Float.Input(
-                    "minimum_gap", default=0.4, min=0.0, max=1.0, step=0.001
+                    "minimum_gap", default=0.4, min=0.0, max=1.0, step=0.001, tooltip="Minimum gap for remeshing"
                 ),
-                IO.Boolean.Input("isometry", default=True),
-                IO.Boolean.Input("regularity_quadrilaterals", default=True),
-                IO.Boolean.Input("regularity_non_quadrilaterals", default=True),
+                IO.Boolean.Input("isometry", default=True, tooltip="Apply isometry to the mesh"),
+                IO.Boolean.Input("regularity_quadrilaterals", default=True, tooltip="Apply regularity to quadrilaterals"),
+                IO.Boolean.Input("regularity_non_quadrilaterals", default=True, tooltip="Apply regularity to non-quadrilaterals"),
                 IO.Float.Input(
                     "regularity_non_quadrilaterals_weight",
                     default=0.9,
                     min=0.0,
                     max=1.0,
                     step=0.01,
+                    tooltip="Weight for regularity of non-quadrilaterals"
                 ),
-                IO.Boolean.Input("align_singularities", default=True),
+                IO.Boolean.Input("align_singularities", default=True, tooltip="Align singularities"),
                 IO.Float.Input(
                     "align_singularities_weight",
                     default=0.1,
                     min=0.0,
                     max=1.0,
                     step=0.01,
+                    tooltip="Weight for aligning singularities"
                 ),
-                IO.Boolean.Input("repeat_losing_constraints_iterations", default=True),
-                IO.Boolean.Input("repeat_losing_constraints_quads", default=False),
-                IO.Boolean.Input("repeat_losing_constraints_non_quads", default=False),
-                IO.Boolean.Input("repeat_losing_constraints_align", default=True),
-                IO.Boolean.Input("hard_parity_constraint", default=True),
+                IO.Boolean.Input("repeat_losing_constraints_iterations", default=True, tooltip="Repeat losing constraints for iterations"),
+                IO.Boolean.Input("repeat_losing_constraints_quads", default=False, tooltip="Repeat losing constraints for quads"),
+                IO.Boolean.Input("repeat_losing_constraints_non_quads", default=False, tooltip="Repeat losing constraints for non-quads"),
+                IO.Boolean.Input("repeat_losing_constraints_align", default=True, tooltip="Repeat losing constraints for alignment"),
+                IO.Boolean.Input("hard_parity_constraint", default=True, tooltip="Apply hard parity constraint"),
                 IO.Combo.Input(
-                    "flow_config", options=["SIMPLE", "HALF"], default="SIMPLE"
+                    "flow_config", options=["SIMPLE", "HALF"], default="SIMPLE", tooltip="Flow configuration"
                 ),
                 IO.Combo.Input(
                     "satsuma_config",
@@ -98,30 +142,33 @@ class QRemeshifyOBJ(IO.ComfyNode):
                         "NODETHRU",
                     ],
                     default="DEFAULT",
+                    tooltip="Satsuma configuration"
                 ),
-                IO.AnyType.Input("mesh_artifact"),
-                IO.AnyType.Input("sharp_artifact"),
-                IO.Boolean.Input("use_cache", default=False),
-                IO.String.Input("sharp_features_path", default=""),
+                IO.AnyType.Input("mesh_artifact", tooltip="In-memory mesh artifact"),
+                IO.AnyType.Input("sharp_artifact", tooltip="In-memory sharp artifact"),
+                IO.Boolean.Input("use_cache", default=False, tooltip="Use cache for remeshing"),
+                IO.String.Input("sharp_features_path", default="", tooltip="Path to sharp features file"),
                 IO.String.Input(
                     "callback_time_limit",
                     default="3,5,10,20,30,60,90,120",
+                    tooltip="Callback time limits"
                 ),
                 IO.String.Input(
                     "callback_gap_limit",
                     default="0.005,0.02,0.05,0.10,0.15,0.20,0.25,0.30",
+                    tooltip="Callback gap limits"
                 ),
-                IO.String.Input("output_dir", default=""),
+                IO.String.Input("output_dir", default="", tooltip="Output directory"),
             ],
             outputs=[
-                IO.String.Output(display_name="output_obj"),
-                IO.String.Output(display_name="workspace_dir"),
-                IO.String.Output(display_name="remeshed_obj"),
-                IO.String.Output(display_name="traced_obj"),
-                IO.File3DAny.Output(display_name="model_3d"),
-                IO.AnyType.Output(display_name="output_mesh_artifact"),
-                IO.AnyType.Output(display_name="remeshed_mesh_artifact"),
-                IO.AnyType.Output(display_name="traced_mesh_artifact"),
+                IO.String.Output(display_name=   "output_obj", tooltip="Output OBJ file path"),
+                IO.String.Output(display_name=   "workspace_dir", tooltip="Workspace directory path"),
+                IO.String.Output(display_name=   "remeshed_obj", tooltip="Remeshed OBJ file path"),
+                IO.String.Output(display_name=   "traced_obj", tooltip="Traced OBJ file path"),
+                IO.File3DAny.Output(display_name="model_3d", tooltip="3D model file saved under '3d' directory"),
+                IO.AnyType.Output(display_name=  "output_mesh_artifact", tooltip="Output in-memory mesh artifact"),
+                IO.AnyType.Output(display_name=  "remeshed_mesh_artifact", tooltip="Remeshed in-memory mesh artifact"),
+                IO.AnyType.Output(display_name=  "traced_mesh_artifact", tooltip="Traced in-memory mesh artifact"),
             ],
         )
 

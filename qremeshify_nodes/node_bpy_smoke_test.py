@@ -17,17 +17,19 @@ class QRemeshifyBpySmokeTest(IO.ComfyNode):
             node_id="QRemeshifyBpySmokeTest",
             display_name="QRemeshify BPY Smoke Test",
             category=NODE_CATEGORY,
+            description="Run progressively deeper bpy probes to isolate embedded Blender issues.",
             inputs=[
                 IO.Combo.Input(
                     "probe_level",
                     options=["IMPORT_ONLY", "APP_INFO", "MESH_DATA", "BMESH"],
                     default="APP_INFO",
+                    tooltip="Select the level of bpy probe to run",
                 ),
             ],
             outputs=[
-                IO.String.Output(display_name="probe_level"),
-                IO.String.Output(display_name="status"),
-                IO.String.Output(display_name="details"),
+                IO.String.Output(display_name="probe_level", tooltip="Selected probe level"),
+                IO.String.Output(display_name="status", tooltip="Probe status (ok/error)"),
+                IO.String.Output(display_name="details", tooltip="Probe details/diagnostics"),
             ],
         )
 

@@ -11,6 +11,11 @@ This project is based on [QRemeshify](https://github.com/ksami/QRemeshify), whic
 - Supports `BPY`, `LIBIGL`, and `TRIMESH` backends for mesh preprocessing
 - Uses extension-owned runtime config files under `qremeshify_config` for advanced solver settings
 
+Currently registered extension nodes:
+- `QRemeshify Mesh To OBJ`
+- `QRemeshify Preprocess Mesh`
+- `QRemeshify OBJ`
+
 # Included Nodes
 ## `QRemeshify Preprocess Mesh`
 Normalizes a mesh into a triangle OBJ and can optionally:
@@ -19,7 +24,7 @@ Normalizes a mesh into a triangle OBJ and can optionally:
 - generate a QRemeshify-compatible `.sharp` file
 
 Inputs:
-- `input_mesh`: `STRING`, `FILE_3D`, or `MESH`
+- `input_mesh`: uploaded/selected `FILE_3D` or `MESH`
 - `backend`: `AUTO`, `BPY`, `LIBIGL`, or `TRIMESH`
 - `symmetry_x`, `symmetry_y`, `symmetry_z`
 - `decimate_enabled`
@@ -40,11 +45,15 @@ Outputs:
 - `sharp_features_path`
 - `sharp_artifact`
 
+Notes:
+- `model_3d` is returned as a typed `FILE_3D` wrapper around the generated OBJ path
+- the OBJ is written into the node workspace or the user-supplied `output_dir`; it is not copied into a dedicated extension-managed `3d` folder
+
 ## `QRemeshify Mesh To OBJ`
 Utility/debug node that converts a mesh input into an OBJ file for downstream nodes.
 
 Inputs:
-- `input_mesh`: `STRING`, `FILE_3D`, or `MESH`
+- `input_mesh`: uploaded/selected `FILE_3D` or `MESH`
 - `backend`: `AUTO`, `BPY`, `LIBIGL`, or `TRIMESH`
 - `allow_backend_fallback`
 - `output_dir` optional
@@ -59,14 +68,36 @@ Outputs:
 Runs the actual QRemeshify backend on an OBJ file.
 
 Inputs:
-- `input_obj`: path to the OBJ to remesh
+- `input_obj`: uploaded/selected `.obj` input for remeshing
 - `smooth`
 - `sharp_angle`
+- `scale_factor`
+- `fixed_chart_clusters`
+- `alpha`
+- `ilp_method`: `LEASTSQUARES` or `ABS`
+- `time_limit`
+- `gap_limit`
+- `minimum_gap`
+- `isometry`
+- `regularity_quadrilaterals`
+- `regularity_non_quadrilaterals`
+- `regularity_non_quadrilaterals_weight`
+- `align_singularities`
+- `align_singularities_weight`
+- `repeat_losing_constraints_iterations`
+- `repeat_losing_constraints_quads`
+- `repeat_losing_constraints_non_quads`
+- `repeat_losing_constraints_align`
+- `hard_parity_constraint`
+- `flow_config`: `SIMPLE` or `HALF`
+- `satsuma_config`: `DEFAULT`, `MST`, `ROUND2EVEN`, `SYMMDC`, `EDGETHRU`, `LEMON`, or `NODETHRU`
 - `sharp_features_path` optional
 - `mesh_artifact` optional
 - `sharp_artifact` optional
 - `use_cache`: reuse previously generated traced intermediates and rerun only quadrangulation
-- advanced solver controls such as `alpha`, `ilp_method`, `flow_config`, and `satsuma_config`
+- `callback_time_limit`: eight comma-separated callback thresholds
+- `callback_gap_limit`: eight comma-separated callback thresholds
+- `output_dir` optional
 
 Outputs:
 - `output_obj`
@@ -124,6 +155,18 @@ Backend-specific notes:
   - explicit `TRIMESH` stays on trimesh
   - `AUTO` selects the best available backend
   - `LIBIGL` sharp generation additionally depends on the installed libigl build actually exposing `igl.sharp_edges`
+  - in the currently validated environment, the installed `libigl` package does not expose `igl.sharp_edges`, so strict `sharp_backend="LIBIGL"` is not currently usable unless that package build changes
+
+Concrete `backend="AUTO"` behavior in preprocessing:
+- if symmetry is requested and `bpy` is available, `AUTO` resolves to `BPY`
+- else if decimation is requested and `bpy` is available, `AUTO` resolves to `BPY`
+- else if decimation is requested and `libigl` is available, `AUTO` resolves to `LIBIGL`
+- otherwise `AUTO` resolves to `BPY` when available, else `TRIMESH`
+
+Concrete `sharp_backend="AUTO"` behavior:
+- `BPY` when `bpy` is available
+- else `LIBIGL` when the installed libigl build exposes `igl.sharp_edges`
+- else `TRIMESH`
 
 # Manifold Requirements
 `LIBIGL` decimation uses `igl.decimate(...)`. Per the libigl Python binding docs, it assumes a manifold mesh, possibly with boundary.
@@ -172,8 +215,27 @@ Current behavior:
 
 The internal pipeline still operates on filesystem-backed OBJ and `.sharp` files, but nodes no longer have to communicate only through bare path strings.
 
+Actual artifact fields:
+- mesh artifact:
+  - `obj_path`
+  - `vertices`
+  - `faces`
+  - `workspace_dir`
+  - `source_path`
+  - `backend`
+  - `label`
+  - `metadata`
+- sharp artifact:
+  - `sharp_features_path`
+  - `feature_rows`
+  - `mesh_obj_path`
+  - `workspace_dir`
+  - `backend`
+  - `label`
+  - `metadata`
+
 # Cache Behavior
-- `use_cache=true` skips preprocess, remesh, and trace
+- `use_cache=true` skips the `QRemeshify OBJ` remesh-and-trace stages and reruns only quadrangulation
 - it reuses the existing `_rem_p0.obj` traced mesh from the same `output_dir`
 - this requires a prior run with `use_cache=false` in that same `output_dir`
 - `use_cache=true` requires `output_dir` to be set explicitly
@@ -214,9 +276,12 @@ pip install -r requirements.txt
 The native backend consumes OBJ files.
 
 Current practical support:
-- `QRemeshify Preprocess Mesh`: accepts `STRING`, `FILE_3D`, or `MESH`, then converts to OBJ through the selected preprocessing backend
-- `QRemeshify Mesh To OBJ`: accepts `STRING`, `FILE_3D`, or `MESH`, then converts to OBJ through the selected backend
-- `QRemeshify OBJ`: OBJ input only at the native remesh boundary
+- `QRemeshify Preprocess Mesh`: accepts `FILE_3D` or `MESH` through the node UI, then converts to OBJ through the selected preprocessing backend
+- `QRemeshify Mesh To OBJ`: accepts `FILE_3D` or `MESH` through the node UI, then converts to OBJ through the selected backend
+- `QRemeshify OBJ`: uploaded/selected `.obj` through the node UI, or a resolved OBJ path via `mesh_artifact`
+
+Implementation note:
+- internal helpers still accept path strings for compatibility with artifact materialization and internal calls, but that is not the primary user-facing socket contract for the preprocess/mesh-to-OBJ nodes
 
 Common pattern:
 - load `GLB`, `GLTF`, `STL`, `PLY`, `OBJ`, or another supported format in `Load3D` or another upstream node
@@ -227,17 +292,20 @@ Common pattern:
 - Symmetry preprocessing is implemented only on the `BPY` path
 - `TRIMESH` is not a decimation backend
 - `LIBIGL` decimation requires a manifold triangle mesh
+- the currently installed `libigl` build in the validated environment does not expose `igl.sharp_edges`, so `LIBIGL` sharp-feature generation currently requires either a different libigl build or `allow_backend_fallback=true`
 - `.rosy` and the native tracing/quadrangulation stages remain file-backed internally
 - The backend contract is still OBJ / `.sharp` file-based internally even though node-to-node contracts can now use richer artifacts
 - Blender-backed preprocessing requires `bpy` to be installed in the exact Python environment ComfyUI is using
 - Sharp-feature generation depends on the selected backend being available in the same Python environment ComfyUI is using
 - Convexity inference in the generated `.sharp` file may need refinement for meshes with inconsistent winding
+- `use_cache=true` only skips remesh/trace when the expected traced intermediate already exists in the chosen `output_dir`
 
 # Tips
 - Keep meshes reasonably sized; remeshing cost grows quickly with mesh complexity
 - Starting from triangulated geometry usually gives more predictable results
 - If you need strict backend isolation, keep `allow_backend_fallback=false`
 - If you need a more forgiving preprocess path, enable `allow_backend_fallback`
+- If you want reliable sharp preservation, use `QRemeshify Preprocess Mesh` to generate `sharp_artifact` from the exact normalized OBJ that will feed remeshing
 - Preserve the generated `workspace_dir` when debugging intermediate outputs
 
 # Pipeline
