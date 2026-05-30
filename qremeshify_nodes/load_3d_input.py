@@ -22,12 +22,28 @@ SUPPORTED_3D_SUFFIXES = {
 
 
 def normalize_path(path: str) -> str:
+    """Normalize path separators to forward slashes.
+    
+    Args:
+        path: Path string to normalize
+        
+    Returns:
+        Normalized path string
+    """
     return path.replace("\\", "/")
 
 
 def list_input_3d_files(
     allowed_suffixes: set[str] | None = None,
 ) -> list[str]:
+    """List all 3D files in the input/3d directory.
+    
+    Args:
+        allowed_suffixes: Set of allowed file suffixes
+        
+    Returns:
+        List of normalized file paths
+    """
     input_dir = os.path.join(folder_paths.get_input_directory(), "3d")
     os.makedirs(input_dir, exist_ok=True)
 
@@ -42,12 +58,28 @@ def list_input_3d_files(
 
 
 def resolve_selected_model_path(model_file: str) -> Path | None:
+    """Resolve selected model path from file path.
+    
+    Args:
+        model_file: File path string
+        
+    Returns:
+        Resolved Path object or None
+    """
     if not model_file or model_file == "none":
         return None
     return Path(folder_paths.get_annotated_filepath(model_file))
 
 
 def resolve_model_path_or_selected(value: str) -> Path | None:
+    """Resolve model path or selected model path.
+    
+    Args:
+        value: File path string
+        
+    Returns:
+        Resolved Path object or None
+    """
     if not value or value == "none":
         return None
 
@@ -59,6 +91,11 @@ def resolve_model_path_or_selected(value: str) -> Path | None:
 
 
 def preload_load3d_images(image) -> None:
+    """Preload load3d images.
+    
+    Args:
+        image: Image dictionary
+    """
     if not image or not isinstance(image, dict):
         return
 
