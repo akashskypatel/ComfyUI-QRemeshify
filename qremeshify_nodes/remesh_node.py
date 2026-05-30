@@ -15,11 +15,6 @@ from .artifacts import (
     resolve_sharp_input,
 )
 from .backend import QuadwildBackend
-from .blender_backend import (
-    bpy_available,
-    postprocess_obj_with_symmetry_with_bpy,
-    preprocess_obj_with_symmetry_with_bpy,
-)
 from .constants import NODE_CATEGORY
 from .errors import QRemeshifyError
 from .load_3d_input import (
@@ -27,7 +22,6 @@ from .load_3d_input import (
     resolve_model_path_or_selected,
 )
 from .mesh_io import parse_float_list, prepare_output_workspace, prepare_workspace
-from .sharp_features import generate_sharp_features
 
 
 class QRemeshifyOBJ(IO.ComfyNode):
@@ -45,9 +39,7 @@ class QRemeshifyOBJ(IO.ComfyNode):
                     options=["none"] + sorted(list_input_3d_files({".obj"})),
                     upload=IO.UploadType.model,
                 ),
-                IO.Boolean.Input("preprocess", default=True),
                 IO.Boolean.Input("smooth", default=True),
-                IO.Boolean.Input("detect_sharp", default=False),
                 IO.Float.Input(
                     "sharp_angle", default=35.0, min=0.0, max=180.0, step=0.1
                 ),
@@ -111,11 +103,6 @@ class QRemeshifyOBJ(IO.ComfyNode):
                 IO.AnyType.Input("sharp_artifact"),
                 IO.Boolean.Input("use_cache", default=False),
                 IO.String.Input("sharp_features_path", default=""),
-                IO.Combo.Input(
-                    "sharp_backend",
-                    options=["AUTO", "BPY", "LIBIGL", "TRIMESH"],
-                    default="AUTO",
-                ),
                 IO.String.Input(
                     "callback_time_limit",
                     default="3,5,10,20,30,60,90,120",
@@ -125,9 +112,6 @@ class QRemeshifyOBJ(IO.ComfyNode):
                     default="0.005,0.02,0.05,0.10,0.15,0.20,0.25,0.30",
                 ),
                 IO.String.Input("output_dir", default=""),
-                IO.Boolean.Input("symmetry_x", default=False),
-                IO.Boolean.Input("symmetry_y", default=False),
-                IO.Boolean.Input("symmetry_z", default=False),
             ],
             outputs=[
                 IO.String.Output(display_name="output_obj"),
@@ -145,9 +129,7 @@ class QRemeshifyOBJ(IO.ComfyNode):
     def execute(
         cls,
         input_obj,
-        preprocess,
         smooth,
-        detect_sharp,
         sharp_angle,
         scale_factor,
         fixed_chart_clusters,
@@ -173,13 +155,9 @@ class QRemeshifyOBJ(IO.ComfyNode):
         sharp_artifact: QRemeshifySharpArtifact | None = None,
         use_cache=False,
         sharp_features_path="",
-        sharp_backend="AUTO",
         callback_time_limit="3,5,10,20,30,60,90,120",
         callback_gap_limit="0.005,0.02,0.05,0.10,0.15,0.20,0.25,0.30",
         output_dir="",
-        symmetry_x=False,
-        symmetry_y=False,
-        symmetry_z=False,
         **kwargs,
     ) -> IO.NodeOutput:
         if input_obj and input_obj != "none":
@@ -226,19 +204,6 @@ class QRemeshifyOBJ(IO.ComfyNode):
                 "use_cache=True requires a persistent output_dir so cached intermediates can be reused"
             )
 
-        if symmetry_x or symmetry_y or symmetry_z:
-            if not bpy_available():
-                raise QRemeshifyError(
-                    "Symmetry currently requires Blender's Python module 'bpy' to be available in the same environment as ComfyUI"
-                )
-            if not use_cache:
-                preprocess_obj_with_symmetry_with_bpy(
-                    working_obj,
-                    working_obj,
-                    symmetry_x,
-                    symmetry_y,
-                    symmetry_z,
-                )
         sharp_path = "" if sharp_payload_available else resolved_sharp_path.strip()
         if sharp_path and not Path(sharp_path).expanduser().resolve().exists():
             raise FileNotFoundError(Path(sharp_path).expanduser().resolve())
@@ -257,21 +222,8 @@ class QRemeshifyOBJ(IO.ComfyNode):
                 )
             elif sharp_path:
                 sharp_path = str(Path(sharp_path).expanduser().resolve())
-            elif detect_sharp:
-                resolved_backend = sharp_backend
-                if sharp_backend == "AUTO":
-                    resolved_backend = "BPY" if bpy_available() else "LIBIGL"
-                sharp_path = str(
-                    generate_sharp_features(
-                        working_obj,
-                        working_obj,
-                        sharp_angle,
-                        workspace_dir / f"{working_obj.stem}_generated.sharp",
-                        resolved_backend,
-                    )
-                )
 
-            backend.remesh_and_field(preprocess, sharp_path, sharp_angle)
+            backend.remesh_and_field(True, sharp_path, sharp_angle)
             backend.trace()
 
         backend.quadrangulate(
@@ -301,17 +253,6 @@ class QRemeshifyOBJ(IO.ComfyNode):
         )
 
         final_path = backend.output_smoothed_path if smooth else backend.output_path
-        if symmetry_x or symmetry_y or symmetry_z:
-            mirrored_final_path = (
-                workspace_dir / f"{Path(final_path).stem}_symmetry.obj"
-            )
-            final_path = postprocess_obj_with_symmetry_with_bpy(
-                Path(final_path),
-                mirrored_final_path,
-                symmetry_x,
-                symmetry_y,
-                symmetry_z,
-            )
         final_vertices, final_faces = parse_obj_payload(str(final_path))
         remeshed_vertices, remeshed_faces = parse_obj_payload(
             str(backend.remeshed_path)

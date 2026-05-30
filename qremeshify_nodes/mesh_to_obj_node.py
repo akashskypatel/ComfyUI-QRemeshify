@@ -52,7 +52,7 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
         output_prefix="",
         **kwargs,
     ) -> IO.NodeOutput:
-        output_obj_path, workspace_dir, mesh_artifact = preprocess_mesh_input(
+        output_obj_path, workspace_dir, mesh_artifact, _, _ = preprocess_mesh_input(
             input_mesh,
             backend=backend,
             output_dir=output_dir,

@@ -5,7 +5,6 @@ from typing_extensions import override
 
 from .qremeshify_nodes.bpy_smoke_test_node import QRemeshifyBpySmokeTest
 from .qremeshify_nodes import (
-    QRemeshifyGenerateSharpFeatures,
     QRemeshifyMeshToOBJ,
     QRemeshifyPreprocessMesh,
     QRemeshifyOBJ,
@@ -17,7 +16,6 @@ class QRemeshifyExtension(ComfyExtension):
     async def get_node_list(self) -> list[type[IO.ComfyNode]]:
         return [
             QRemeshifyBpySmokeTest,
-            QRemeshifyGenerateSharpFeatures,
             QRemeshifyMeshToOBJ,
             QRemeshifyPreprocessMesh,
             QRemeshifyOBJ,

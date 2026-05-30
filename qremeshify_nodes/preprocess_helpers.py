@@ -6,7 +6,13 @@ from pathlib import Path
 
 import numpy as np
 
-from .artifacts import build_mesh_artifact, mesh_arrays_to_lists, parse_obj_payload
+from .artifacts import (
+    build_mesh_artifact,
+    build_sharp_artifact,
+    mesh_arrays_to_lists,
+    parse_obj_payload,
+    parse_sharp_payload,
+)
 from .blender_backend import bpy_available, preprocess_mesh_with_bpy
 from .errors import QRemeshifyError
 from .mesh_io import (
@@ -15,6 +21,7 @@ from .mesh_io import (
     prepare_output_workspace,
     write_triangle_obj,
 )
+from .sharp_features import generate_sharp_features
 
 
 def to_numpy(value):
@@ -108,6 +115,9 @@ def preprocess_mesh_input(
     decimate_enabled=False,
     decimate_target_faces=0,
     decimate_ratio=1.0,
+    generate_sharp=False,
+    sharp_angle=35.0,
+    sharp_backend="AUTO",
 ):
     workspace_dir, source_mesh, stem, input_kind = coerce_mesh_input(
         input_mesh, output_dir, output_prefix
@@ -142,6 +152,7 @@ def preprocess_mesh_input(
         "decimate_enabled": str(bool(decimate_enabled)).lower(),
         "decimate_target_faces": str(int(decimate_target_faces)),
         "decimate_ratio": f"{float(decimate_ratio):.6f}",
+        "generate_sharp": str(bool(generate_sharp)).lower(),
     }
 
     if input_kind == "mesh":
@@ -204,4 +215,35 @@ def preprocess_mesh_input(
         label=stem,
         metadata=metadata,
     )
-    return output_obj_path, workspace_dir, mesh_artifact
+
+    sharp_path = ""
+    sharp_artifact = None
+    if generate_sharp:
+        resolved_sharp_backend = sharp_backend
+        if sharp_backend == "AUTO":
+            resolved_sharp_backend = "BPY" if bpy_available() else "LIBIGL"
+        sharp_output_path = workspace_dir / f"{stem}.sharp"
+        sharp_path = str(
+            generate_sharp_features(
+                output_obj_path,
+                output_obj_path,
+                sharp_angle,
+                sharp_output_path,
+                resolved_sharp_backend,
+            )
+        )
+        feature_rows = parse_sharp_payload(sharp_path)
+        sharp_artifact = build_sharp_artifact(
+            sharp_features_path=sharp_path,
+            feature_rows=feature_rows,
+            mesh_obj_path=str(output_obj_path),
+            workspace_dir=str(workspace_dir),
+            backend=resolved_sharp_backend,
+            label=stem,
+            metadata={
+                "sharp_angle": f"{float(sharp_angle):.4f}",
+                "source_backend": resolved_sharp_backend,
+            },
+        )
+
+    return output_obj_path, workspace_dir, mesh_artifact, sharp_path, sharp_artifact
