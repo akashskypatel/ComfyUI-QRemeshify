@@ -16,27 +16,11 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
             node_id="QRemeshifyPreprocessMesh",
             display_name="QRemeshify Preprocess Mesh",
             category=NODE_CATEGORY,
-            description="Normalize and optionally preprocess a mesh before remeshing.\n"
-            "Inputs: input_mesh - Mesh file to preprocess\n"
-            "       backend - Backend to use for mesh processing\n"
-            "       symmetry_x - Apply symmetry along X axis\n"
-            "       symmetry_y - Apply symmetry along Y axis\n"
-            "       symmetry_z - Apply symmetry along Z axis\n"
-            "       decimate_enabled - Enable decimation\n"
-            "       decimate_target_faces - Target number of faces after decimation\n"
-            "       decimate_ratio - Decimation ratio\n"
-            "       allow_backend_fallback - Allow backend fallback\n"
-            "       generate_sharp - Generate sharp features\n"
-            "       sharp_angle - Sharp angle threshold\n"
-            "       sharp_backend - Backend to use for sharp feature detection\n"
-            "       output_dir - Output directory for processed files\n"
-            "       output_prefix - Prefix for output filenames\n"
-            "Outputs: output_obj - Output OBJ mesh file path\n"
-            "       workspace_dir - Workspace directory path\n"
-            "       model_3d - Output 3D model file in '3d' directory\n"
-            "       mesh_artifact - Output in-memory mesh artifact\n"
-            "       sharp_features_path - Sharp features file path\n"
-            "       sharp_artifact - Output in-memory sharp artifact",
+            description="Normalize and optionally preprocess a mesh before remeshing. "
+            "Normalizes a mesh into a triangle OBJ and can optionally: "
+            "  1. Apply symmetry along X, Y, or Z axes"
+            "  2. Decimate the mesh to reduce face count"
+            "  3. Generate sharp features for better remeshing",
             inputs=[
                 IO.MultiType.Input(
                     IO.Combo.Input(

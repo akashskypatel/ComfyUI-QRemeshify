@@ -19,15 +19,7 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
             node_id="QRemeshifyMeshToOBJ",
             display_name="QRemeshify Mesh to OBJ",
             category=NODE_CATEGORY,
-            description="Convert a mesh file to an OBJ suitable for downstream nodes.\n"
-            "Inputs: input_mesh - Mesh file to convert\n"
-            "       backend - Backend to use for mesh processing\n"
-            "       allow_backend_fallback - Allow backend fallback\n"
-            "       output_dir - Output directory for converted files\n"
-            "       output_prefix - Prefix for output filenames\n"
-            "Outputs: output_obj - Output OBJ mesh file path\n"
-            "       workspace_dir - Workspace directory path\n"
-            "       mesh_artifact - Output in-memory mesh artifact",
+            description="Convert a mesh file to an OBJ suitable for downstream nodes.",
             inputs=[
                 IO.MultiType.Input(
                     IO.Combo.Input(

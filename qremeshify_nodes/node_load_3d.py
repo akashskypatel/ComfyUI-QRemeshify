@@ -28,14 +28,7 @@ class QRemeshifyLoad3D(IO.ComfyNode):
             node_id="QRemeshifyLoad3D",
             display_name="QRemeshify Load 3D",
             category=NODE_CATEGORY,
-            description="Loads 3D files from the '3d' input directory.\n"
-            "Inputs: model_file - Select a 3D model file to load\n"
-            "       image - Image input for 3D processing\n"
-            "       width - Width for 3D processing\n"
-            "       height - Height for 3D processing\n"
-            "Outputs: mesh_path - Path to the loaded mesh\n"
-            "       model_3d - Loaded 3D model file from '3d' directory\n"
-            "       mesh_artifact - Mesh artifact for downstream nodes",
+            description="Loads 3D files from the '3d' input directory.",
             inputs=[
                 IO.Combo.Input(
                     "model_file",
