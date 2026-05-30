@@ -1,8 +1,8 @@
 """QRemeshify ComfyUI node package."""
 
-from .mesh_to_obj_node import QRemeshifyMeshToOBJ
-from .preprocess_mesh_node import QRemeshifyPreprocessMesh
-from .remesh_node import QRemeshifyOBJ
+from .node_mesh_to_obj import QRemeshifyMeshToOBJ
+from .node_preprocess_mesh import QRemeshifyPreprocessMesh
+from .node_remesh import QRemeshifyOBJ
 
 __all__ = [
     "QRemeshifyMeshToOBJ",

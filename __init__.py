@@ -3,7 +3,6 @@
 from comfy_api.latest import IO, ComfyExtension
 from typing_extensions import override
 
-from .qremeshify_nodes.bpy_smoke_test_node import QRemeshifyBpySmokeTest
 from .qremeshify_nodes import (
     QRemeshifyMeshToOBJ,
     QRemeshifyPreprocessMesh,
@@ -15,7 +14,6 @@ class QRemeshifyExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[IO.ComfyNode]]:
         return [
-            QRemeshifyBpySmokeTest,
             QRemeshifyMeshToOBJ,
             QRemeshifyPreprocessMesh,
             QRemeshifyOBJ,
