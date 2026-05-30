@@ -11,6 +11,62 @@ from .errors import QRemeshifyError
 from .mesh_io import compute_face_normals, load_triangle_mesh_with_trimesh, write_triangle_obj
 
 
+def _require_igl():
+    try:
+        import igl
+    except ImportError as exc:  # pragma: no cover
+        raise QRemeshifyError(
+            "backend='LIBIGL' requires the 'libigl' Python package to be installed"
+        ) from exc
+    return igl
+
+
+def libigl_sharp_edges_available() -> bool:
+    try:
+        igl = _require_igl()
+    except QRemeshifyError:
+        return False
+    return hasattr(igl, "sharp_edges")
+
+
+def _require_igl_sharp_edges():
+    igl = _require_igl()
+    if not hasattr(igl, "sharp_edges"):
+        raise QRemeshifyError(
+            "sharp_backend='LIBIGL' requires an installed libigl build that exposes igl.sharp_edges"
+        )
+    return igl
+
+
+def load_triangle_mesh_with_libigl(mesh_path: Path) -> tuple[np.ndarray, np.ndarray]:
+    igl = _require_igl()
+    vertices, faces = igl.read_triangle_mesh(str(mesh_path))
+    vertices = np.asarray(vertices, dtype=np.float64)
+    faces = np.asarray(faces, dtype=np.int64)
+    if vertices.size == 0 or faces.size == 0:
+        raise QRemeshifyError(f"libigl could not load a triangle mesh from: {mesh_path}")
+    if vertices.ndim != 2 or vertices.shape[1] != 3:
+        raise QRemeshifyError("libigl returned vertices with an unexpected shape")
+    if faces.ndim != 2 or faces.shape[1] != 3:
+        raise QRemeshifyError(
+            "backend='LIBIGL' requires a triangle mesh; non-triangular faces were returned"
+        )
+    return vertices, faces
+
+
+def write_triangle_obj_with_libigl(
+    obj_path: Path, vertices: np.ndarray, faces: np.ndarray
+) -> None:
+    igl = _require_igl()
+    written = igl.write_obj(
+        str(obj_path),
+        np.asarray(vertices, dtype=np.float64),
+        np.asarray(faces, dtype=np.int32),
+    )
+    if written is False:
+        raise QRemeshifyError(f"libigl could not write OBJ output: {obj_path}")
+
+
 def collect_sharp_feature_lines(
     vertices: np.ndarray,
     faces: np.ndarray,
@@ -61,18 +117,9 @@ def write_sharp_feature_file(output_path: Path, feature_lines: list[str]) -> Pat
 
 
 def generate_sharp_features_with_libigl(obj_path: Path, sharp_angle: float, output_path: Path) -> Path:
-    try:
-        import igl
-    except ImportError as exc:  # pragma: no cover
-        raise QRemeshifyError("detect_sharp=True requires the 'libigl' Python package to be installed") from exc
-
-    vertices, faces = igl.read_triangle_mesh(str(obj_path))
-    vertices = np.asarray(vertices, dtype=np.float64)
-    faces = np.asarray(faces, dtype=np.int64)
-    if vertices.size == 0 or faces.size == 0:
-        raise QRemeshifyError("libigl could not load a triangle mesh from the OBJ input")
-
-    write_triangle_obj(obj_path, vertices, faces)
+    igl = _require_igl_sharp_edges()
+    vertices, faces = load_triangle_mesh_with_libigl(obj_path)
+    write_triangle_obj_with_libigl(obj_path, vertices, faces)
     sharp_result = igl.sharp_edges(vertices, faces, np.pi * (sharp_angle / 180.0))
     _, _, unique_edges, _, _, sharp_indices = sharp_result
     unique_edges = np.asarray(unique_edges, dtype=np.int64)
@@ -128,8 +175,8 @@ def generate_sharp_features(
             output_path,
         )
     if backend == "LIBIGL":
-        vertices, faces = load_triangle_mesh_with_trimesh(mesh_path)
-        write_triangle_obj(normalized_obj_path, vertices, faces)
+        vertices, faces = load_triangle_mesh_with_libigl(mesh_path)
+        write_triangle_obj_with_libigl(normalized_obj_path, vertices, faces)
         return generate_sharp_features_with_libigl(normalized_obj_path, sharp_angle, output_path)
     if backend == "TRIMESH":
         return generate_sharp_features_with_trimesh(mesh_path, normalized_obj_path, sharp_angle, output_path)

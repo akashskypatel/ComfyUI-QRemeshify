@@ -118,6 +118,12 @@ Backend-specific notes:
 - `BPY` is required for symmetry preprocessing
 - `LIBIGL` supports normalization and decimation
 - `TRIMESH` is a normalization/backend fallback path and does not provide decimation or symmetry
+- `sharp_backend` follows the same rule set:
+  - explicit `BPY` stays on Blender for sharp-feature generation
+  - explicit `LIBIGL` stays on libigl and uses `igl.sharp_edges(...)`
+  - explicit `TRIMESH` stays on trimesh
+  - `AUTO` selects the best available backend
+  - `LIBIGL` sharp generation additionally depends on the installed libigl build actually exposing `igl.sharp_edges`
 
 # Manifold Requirements
 `LIBIGL` decimation uses `igl.decimate(...)`. Per the libigl Python binding docs, it assumes a manifold mesh, possibly with boundary.

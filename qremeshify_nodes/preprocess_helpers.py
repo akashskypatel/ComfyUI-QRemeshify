@@ -21,7 +21,7 @@ from .mesh_io import (
     prepare_output_workspace,
     write_triangle_obj,
 )
-from .sharp_features import generate_sharp_features
+from .sharp_features import generate_sharp_features, libigl_sharp_edges_available
 
 
 def to_numpy(value):
@@ -463,7 +463,32 @@ def preprocess_mesh_input(
     if generate_sharp:
         resolved_sharp_backend = sharp_backend
         if sharp_backend == "AUTO":
-            resolved_sharp_backend = "BPY" if bpy_available() else "LIBIGL"
+            if bpy_available():
+                resolved_sharp_backend = "BPY"
+            elif libigl_sharp_edges_available():
+                resolved_sharp_backend = "LIBIGL"
+            else:
+                resolved_sharp_backend = "TRIMESH"
+        elif sharp_backend == "BPY" and not bpy_available():
+            if allow_backend_fallback:
+                if libigl_sharp_edges_available():
+                    resolved_sharp_backend = "LIBIGL"
+                else:
+                    resolved_sharp_backend = "TRIMESH"
+            else:
+                raise QRemeshifyError(
+                    "sharp_backend='BPY' requires Blender's Python modules to be installed and importable"
+                )
+        elif sharp_backend == "LIBIGL" and not libigl_sharp_edges_available():
+            if allow_backend_fallback:
+                if bpy_available():
+                    resolved_sharp_backend = "BPY"
+                else:
+                    resolved_sharp_backend = "TRIMESH"
+            else:
+                raise QRemeshifyError(
+                    "sharp_backend='LIBIGL' requires a libigl build that exposes igl.sharp_edges"
+                )
         sharp_output_path = workspace_dir / f"{stem}.sharp"
         sharp_path = str(
             generate_sharp_features(
