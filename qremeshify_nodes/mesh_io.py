@@ -12,6 +12,19 @@ from .errors import QRemeshifyError
 
 
 def parse_float_list(value: str, expected_count: int, label: str) -> list[float]:
+    """Parse a comma-separated string of floats.
+    
+    Args:
+        value: Comma-separated string of floats
+        expected_count: Expected number of floats
+        label: Label for error messages
+        
+    Returns:
+        List of floats
+        
+    Raises:
+        QRemeshifyError: If parsing fails or count doesn't match
+    """
     parts = [part.strip() for part in value.split(",") if part.strip()]
     if len(parts) != expected_count:
         raise QRemeshifyError(
@@ -24,6 +37,15 @@ def parse_float_list(value: str, expected_count: int, label: str) -> list[float]
 
 
 def prepare_output_workspace(output_dir: str, prefix: str = "qremeshify_") -> Path:
+    """Prepare output workspace directory.
+    
+    Args:
+        output_dir: Output directory path
+        prefix: Temporary directory prefix
+        
+    Returns:
+        Path to workspace directory
+    """
     if output_dir.strip():
         workspace_dir = Path(output_dir).expanduser().resolve()
         workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -33,6 +55,14 @@ def prepare_output_workspace(output_dir: str, prefix: str = "qremeshify_") -> Pa
 
 
 def resolve_input_mesh_path(input_path: str) -> Path:
+    """Resolve input mesh path.
+    
+    Args:
+        input_path: Input mesh path
+        
+    Returns:
+        Resolved Path object
+    """
     raw_path = Path(input_path).expanduser()
     direct_candidate = raw_path.resolve()
     if direct_candidate.exists():
@@ -73,6 +103,18 @@ def resolve_input_mesh_path(input_path: str) -> Path:
 
 
 def prepare_workspace(input_obj: str, output_dir: str) -> tuple[Path, Path]:
+    """Prepare workspace for mesh processing.
+    
+    Args:
+        input_obj: Input mesh path
+        output_dir: Output directory path
+        
+    Returns:
+        Tuple of (workspace_dir, working_obj)
+        
+    Raises:
+        QRemeshifyError: If input is not an OBJ file
+    """
     source_path = resolve_input_mesh_path(input_obj)
     if source_path.suffix.lower() != ".obj":
         raise QRemeshifyError("Only OBJ input is supported by this node")
@@ -87,12 +129,29 @@ def prepare_workspace(input_obj: str, output_dir: str) -> tuple[Path, Path]:
 def prepare_mesh_workspace(
     input_mesh: str, output_dir: str, prefix: str = "qremeshify_"
 ) -> tuple[Path, Path]:
+    """Prepare workspace for mesh processing.
+    
+    Args:
+        input_mesh: Input mesh path
+        output_dir: Output directory path
+        prefix: Temporary directory prefix
+        
+    Returns:
+        Tuple of (workspace_dir, source_path)
+    """
     source_path = resolve_input_mesh_path(input_mesh)
     workspace_dir = prepare_output_workspace(output_dir, prefix=prefix)
     return workspace_dir, source_path
 
 
 def write_triangle_obj(obj_path: Path, vertices: np.ndarray, faces: np.ndarray) -> None:
+    """Write triangle mesh to OBJ file.
+    
+    Args:
+        obj_path: Output OBJ file path
+        vertices: Vertex coordinates
+        faces: Face indices
+    """
     with obj_path.open("w", encoding="utf-8") as handle:
         handle.write("# OBJ file\n")
         for vertex in vertices:
@@ -104,6 +163,15 @@ def write_triangle_obj(obj_path: Path, vertices: np.ndarray, faces: np.ndarray) 
 
 
 def compute_face_normals(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """Compute face normals for a triangle mesh.
+    
+    Args:
+        vertices: Vertex coordinates
+        faces: Face indices
+        
+    Returns:
+        Face normals
+    """
     tri = vertices[faces]
     normals = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     lengths = np.linalg.norm(normals, axis=1)
@@ -114,6 +182,17 @@ def compute_face_normals(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
 
 
 def load_triangle_mesh_with_trimesh(mesh_path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Load triangle mesh using trimesh.
+    
+    Args:
+        mesh_path: Mesh file path
+        
+    Returns:
+        Tuple of (vertices, faces)
+        
+    Raises:
+        QRemeshifyError: If trimesh is not installed or loading fails
+    """
     try:
         import trimesh
     except ImportError as exc:  # pragma: no cover
