@@ -19,6 +19,11 @@ from .mesh_io import (
     prepare_output_workspace,
     write_triangle_obj,
 )
+from .load_3d_input import (
+    SUPPORTED_3D_SUFFIXES,
+    list_input_3d_files,
+    resolve_model_path_or_selected,
+)
 
 
 def _to_numpy(value):
@@ -112,7 +117,11 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
             category=NODE_CATEGORY,
             inputs=[
                 IO.MultiType.Input(
-                    IO.String.Input("input_mesh", default=""),
+                    IO.Combo.Input(
+                        "input_mesh",
+                        options=["none"] + sorted(list_input_3d_files(SUPPORTED_3D_SUFFIXES)),
+                        upload=IO.UploadType.model,
+                    ),
                     [IO.File3DAny, IO.Mesh],
                 ),
                 IO.Combo.Input(

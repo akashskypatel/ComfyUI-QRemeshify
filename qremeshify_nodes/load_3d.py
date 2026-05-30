@@ -1,16 +1,19 @@
 """Load 3D files from the '3d' input directory."""
 
-import os
 from pathlib import Path
+from typing import Any
 
-import folder_paths
-from comfy_api.latest import IO, InputImpl, Types
+from comfy_api.latest import IO, Types
 
-import nodes
-
-
-def normalize_path(path):
-    return path.replace("\\", "/")
+from .artifacts import build_mesh_artifact
+from .constants import NODE_CATEGORY
+from .load_3d_input import (
+    SUPPORTED_3D_SUFFIXES,
+    list_input_3d_files,
+    normalize_path,
+    preload_load3d_images,
+    resolve_selected_model_path,
+)
 
 
 class QRemeshifyLoad3D(IO.ComfyNode):
@@ -20,34 +23,11 @@ class QRemeshifyLoad3D(IO.ComfyNode):
 
     @classmethod
     def define_schema(cls) -> IO.Schema:
-        input_dir = os.path.join(folder_paths.get_input_directory(), "3d")
-
-        os.makedirs(input_dir, exist_ok=True)
-
-        input_path = Path(input_dir)
-        base_path = Path(folder_paths.get_input_directory())
-
-        files = [
-            normalize_path(str(file_path.relative_to(base_path)))
-            for file_path in input_path.rglob("*")
-            if file_path.suffix.lower()
-            in {
-                ".gltf",
-                ".glb",
-                ".obj",
-                ".fbx",
-                ".stl",
-                ".spz",
-                ".splat",
-                ".ply",
-                ".ksplat",
-            }
-        ]
+        files = list_input_3d_files(SUPPORTED_3D_SUFFIXES)
         return IO.Schema(
             node_id="QRemeshifyLoad3D",
-            display_name="QRemeshify Load 3D & Animation",
-            category="QRemeshify",
-            essentials_category="Extensions",
+            display_name="QRemeshify Load 3D",
+            category=NODE_CATEGORY,
             inputs=[
                 IO.Combo.Input(
                     "model_file",
@@ -59,47 +39,55 @@ class QRemeshifyLoad3D(IO.ComfyNode):
                 IO.Int.Input("height", default=1024, min=1, max=4096, step=1),
             ],
             outputs=[
-                IO.Image.Output(display_name="image"),
-                IO.Mask.Output(display_name="mask"),
                 IO.String.Output(display_name="mesh_path"),
-                IO.Image.Output(display_name="normal"),
-                IO.Load3DCamera.Output(display_name="camera_info"),
-                IO.Video.Output(display_name="recording_video"),
                 IO.File3DAny.Output(display_name="model_3d"),
+                IO.AnyType.Output(display_name="mesh_artifact")
             ],
         )
 
     @classmethod
     def execute(cls, model_file, image, **kwargs) -> IO.NodeOutput:
-        image_path = folder_paths.get_annotated_filepath(image["image"])
-        mask_path = folder_paths.get_annotated_filepath(image["mask"])
-        normal_path = folder_paths.get_annotated_filepath(image["normal"])
-
-        load_image_node = nodes.LoadImage()
-        output_image, ignore_mask = load_image_node.load_image(image=image_path)
-        ignore_image, output_mask = load_image_node.load_image(image=mask_path)
-        normal_image, ignore_mask2 = load_image_node.load_image(image=normal_path)
-
-        video = None
-
-        if image["recording"] != "":
-            recording_video_path = folder_paths.get_annotated_filepath(
-                image["recording"]
-            )
-
-            video = InputImpl.VideoFromFile(recording_video_path)
+        preload_load3d_images(image)
 
         file_3d = None
         mesh_path = ""
+        mesh_artifact = None
         if model_file and model_file != "none":
-            file_3d = Types.File3D(folder_paths.get_annotated_filepath(model_file))
+            resolved_path = resolve_selected_model_path(model_file)
+            file_3d = Types.File3D(str(resolved_path))
             mesh_path = model_file
+            obj_path = str(resolved_path) if resolved_path.suffix.lower() == ".obj" else ""
+            mesh_artifact = build_mesh_artifact(
+                obj_path=obj_path,
+                workspace_dir="",
+                source_path=str(resolved_path),
+                backend="LOAD3D",
+                label=resolved_path.stem,
+                metadata={
+                    "kind": "file3d",
+                    "format": resolved_path.suffix.lower().lstrip("."),
+                },
+            )
         return IO.NodeOutput(
-            output_image,
-            output_mask,
             mesh_path,
-            normal_image,
-            image["camera_info"],
-            video,
             file_3d,
+            mesh_artifact
         )
+
+    @classmethod
+    def fingerprint_inputs(cls, model_file="none", **kwargs) -> Any:
+        if not model_file or model_file == "none":
+            return ("none",)
+
+        resolved_path = resolve_selected_model_path(model_file)
+        if not resolved_path.exists():
+            return ("missing", normalize_path(model_file), str(resolved_path))
+        stat = resolved_path.stat()
+        return (
+            normalize_path(model_file),
+            str(resolved_path.resolve()),
+            stat.st_size,
+            stat.st_mtime_ns,
+        )
+
+    process = execute

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from comfy_api.latest import IO
+from comfy_api.latest import IO, Types
 
 from .artifacts import (
     QRemeshifyMeshArtifact,
@@ -22,6 +22,10 @@ from .blender_backend import (
 )
 from .constants import NODE_CATEGORY
 from .errors import QRemeshifyError
+from .load_3d_input import (
+    list_input_3d_files,
+    resolve_model_path_or_selected,
+)
 from .mesh_io import parse_float_list, prepare_output_workspace, prepare_workspace
 from .sharp_features import generate_sharp_features
 
@@ -36,7 +40,11 @@ class QRemeshifyOBJ(IO.ComfyNode):
             display_name="QRemeshify OBJ",
             category=NODE_CATEGORY,
             inputs=[
-                IO.String.Input("input_obj", default=""),
+                IO.Combo.Input(
+                    "input_obj",
+                    options=["none"] + sorted(list_input_3d_files({".obj"})),
+                    upload=IO.UploadType.model,
+                ),
                 IO.Boolean.Input("preprocess", default=True),
                 IO.Boolean.Input("smooth", default=True),
                 IO.Boolean.Input("detect_sharp", default=False),
@@ -126,6 +134,7 @@ class QRemeshifyOBJ(IO.ComfyNode):
                 IO.String.Output(display_name="workspace_dir"),
                 IO.String.Output(display_name="remeshed_obj"),
                 IO.String.Output(display_name="traced_obj"),
+                IO.File3DAny.Output(display_name="model_3d"),
                 IO.AnyType.Output(display_name="output_mesh_artifact"),
                 IO.AnyType.Output(display_name="remeshed_mesh_artifact"),
                 IO.AnyType.Output(display_name="traced_mesh_artifact"),
@@ -173,6 +182,12 @@ class QRemeshifyOBJ(IO.ComfyNode):
         symmetry_z=False,
         **kwargs,
     ) -> IO.NodeOutput:
+        if input_obj and input_obj != "none":
+            selected_path = resolve_model_path_or_selected(input_obj)
+            input_obj = str(selected_path) if selected_path is not None else ""
+        else:
+            input_obj = ""
+
         resolved_input_obj = resolve_mesh_input(input_obj, mesh_artifact)
         resolved_sharp_path = resolve_sharp_input(sharp_features_path, sharp_artifact)
         time_limits = parse_float_list(callback_time_limit, 8, "callback_time_limit")
@@ -332,11 +347,13 @@ class QRemeshifyOBJ(IO.ComfyNode):
             label=backend.traced_path.stem,
             metadata={"stage": "traced"},
         )
+        model_3d = Types.File3D(str(final_path))
         return IO.NodeOutput(
             str(final_path),
             str(workspace_dir),
             str(backend.remeshed_path),
             str(backend.traced_path),
+            model_3d,
             output_mesh_artifact,
             remeshed_mesh_artifact,
             traced_mesh_artifact,

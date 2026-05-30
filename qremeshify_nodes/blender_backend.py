@@ -9,13 +9,9 @@ from .errors import QRemeshifyError
 
 
 def bpy_available() -> bool:
-    try:
-        import bmesh  # noqa: F401
-        import bpy  # noqa: F401
-        import mathutils  # noqa: F401
-    except ImportError:
-        return False
-    return True
+    from .bpy_subprocess import bpy_available_via_subprocess
+
+    return bpy_available_via_subprocess()
 
 
 def _require_bpy():
@@ -298,16 +294,9 @@ def _write_sharp_file_from_bmesh(bm, sharp_angle: float, output_path: Path) -> P
 
 
 def normalize_mesh_to_obj_with_bpy(mesh_path: Path, output_obj_path: Path) -> Path:
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects)
-        _write_bmesh_obj(bm, output_obj_path)
-        return output_obj_path
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
+    from .bpy_subprocess import normalize_mesh_to_obj_with_bpy_subprocess
+
+    return normalize_mesh_to_obj_with_bpy_subprocess(mesh_path, output_obj_path)
 
 
 def preprocess_obj_with_symmetry_with_bpy(
@@ -318,19 +307,16 @@ def preprocess_obj_with_symmetry_with_bpy(
     symmetry_z: bool,
     tolerance: float = 1e-5,
 ) -> Path:
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects)
-        _apply_symmetry_preprocess_to_bmesh(
-            bm, symmetry_x, symmetry_y, symmetry_z, tolerance
-        )
-        _write_bmesh_obj(bm, output_obj_path)
-        return output_obj_path
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
+    from .bpy_subprocess import preprocess_obj_with_symmetry_with_bpy_subprocess
+
+    return preprocess_obj_with_symmetry_with_bpy_subprocess(
+        mesh_path,
+        output_obj_path,
+        symmetry_x,
+        symmetry_y,
+        symmetry_z,
+        tolerance,
+    )
 
 
 def normalize_mesh_and_generate_sharp_with_bpy(
@@ -339,16 +325,14 @@ def normalize_mesh_and_generate_sharp_with_bpy(
     sharp_angle: float,
     output_path: Path,
 ) -> Path:
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects)
-        _write_bmesh_obj(bm, normalized_obj_path)
-        return _write_sharp_file_from_bmesh(bm, sharp_angle, output_path)
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
+    from .bpy_subprocess import normalize_mesh_and_generate_sharp_with_bpy_subprocess
+
+    return normalize_mesh_and_generate_sharp_with_bpy_subprocess(
+        mesh_path,
+        normalized_obj_path,
+        sharp_angle,
+        output_path,
+    )
 
 
 def postprocess_obj_with_symmetry_with_bpy(
@@ -359,16 +343,13 @@ def postprocess_obj_with_symmetry_with_bpy(
     symmetry_z: bool,
     tolerance: float = 1e-5,
 ) -> Path:
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects)
-        _apply_symmetry_postprocess_to_bmesh(
-            bm, symmetry_x, symmetry_y, symmetry_z, tolerance
-        )
-        _write_bmesh_obj(bm, output_obj_path)
-        return output_obj_path
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
+    from .bpy_subprocess import postprocess_obj_with_symmetry_with_bpy_subprocess
+
+    return postprocess_obj_with_symmetry_with_bpy_subprocess(
+        mesh_path,
+        output_obj_path,
+        symmetry_x,
+        symmetry_y,
+        symmetry_z,
+        tolerance,
+    )

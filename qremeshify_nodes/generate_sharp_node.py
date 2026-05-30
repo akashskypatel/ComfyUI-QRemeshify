@@ -12,6 +12,11 @@ from .artifacts import (
 )
 from .blender_backend import bpy_available
 from .constants import NODE_CATEGORY
+from .load_3d_input import (
+    SUPPORTED_3D_SUFFIXES,
+    list_input_3d_files,
+    resolve_model_path_or_selected,
+)
 from .mesh_to_obj_node import QRemeshifyMeshToOBJ
 from .sharp_features import generate_sharp_features
 
@@ -27,7 +32,11 @@ class QRemeshifyGenerateSharpFeatures(IO.ComfyNode):
             category=NODE_CATEGORY,
             inputs=[
                 IO.MultiType.Input(
-                    IO.String.Input("input_mesh", default=""),
+                    IO.Combo.Input(
+                        "input_mesh",
+                        options=["none"] + sorted(list_input_3d_files(SUPPORTED_3D_SUFFIXES)),
+                        upload=IO.UploadType.model,
+                    ),
                     [IO.File3DAny, IO.Mesh],
                 ),
                 IO.Combo.Input(
@@ -58,8 +67,8 @@ class QRemeshifyGenerateSharpFeatures(IO.ComfyNode):
     def execute(
         cls,
         input_mesh,
-        backend,
-        sharp_angle,
+        backend="AUTO",
+        sharp_angle=35.0,
         output_dir="",
         output_prefix="",
         **kwargs,
