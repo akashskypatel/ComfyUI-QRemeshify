@@ -5,7 +5,7 @@ ComfyUI custom nodes for running the QRemeshify remeshing pipeline from Python, 
 This project is based on [QRemeshify](https://github.com/ksami/QRemeshify), which is itself based on [QuadWild with Bi-MDF solver](https://github.com/cgg-bern/quadwild-bimdf) and [QuadWild](https://github.com/nicopietroni/quadwild).
 
 # What It Does
-- Runs the native QRemeshify backend from ComfyUI
+- Runs the native `quadwild` backend from ComfyUI
 - Produces quad-oriented remeshed OBJ output
 - Exposes a dedicated preprocessing node for normalization, symmetry, optional decimation, and sharp-feature generation
 - Supports `BPY`, `LIBIGL`, and `TRIMESH` backends for mesh preprocessing
@@ -44,10 +44,6 @@ Outputs:
 - `mesh_artifact`
 - `sharp_features_path`
 - `sharp_artifact`
-
-Notes:
-- `model_3d` is returned as a typed `FILE_3D` wrapper around the generated OBJ path
-- the OBJ is written into the node workspace or the user-supplied `output_dir`; it is not copied into a dedicated extension-managed `3d` folder
 
 ## `QRemeshify Mesh To OBJ`
 Utility/debug node that converts a mesh input into an OBJ file for downstream nodes.
@@ -148,19 +144,19 @@ When `allow_backend_fallback=true`:
 Backend-specific notes:
 - `BPY` is required for symmetry preprocessing
 - `LIBIGL` supports normalization and decimation
-- `TRIMESH` is a normalization/backend fallback path and does not provide decimation or symmetry
+- `TRIMESH` supports normalization, sharp-feature generation, and decimation, but does not provide symmetry
 - `sharp_backend` follows the same rule set:
   - explicit `BPY` stays on Blender for sharp-feature generation
   - explicit `LIBIGL` stays on libigl and uses `igl.sharp_edges(...)`
   - explicit `TRIMESH` stays on trimesh
   - `AUTO` selects the best available backend
-  - `LIBIGL` sharp generation additionally depends on the installed libigl build actually exposing `igl.sharp_edges`
-  - in the currently validated environment, the installed `libigl` package does not expose `igl.sharp_edges`, so strict `sharp_backend="LIBIGL"` is not currently usable unless that package build changes
+  - `LIBIGL` sharp generation additionally depends on the installed libigl build exposing `igl.sharp_edges`
 
 Concrete `backend="AUTO"` behavior in preprocessing:
 - if symmetry is requested and `bpy` is available, `AUTO` resolves to `BPY`
 - else if decimation is requested and `bpy` is available, `AUTO` resolves to `BPY`
 - else if decimation is requested and `libigl` is available, `AUTO` resolves to `LIBIGL`
+- else if decimation is requested, `AUTO` resolves to `TRIMESH`
 - otherwise `AUTO` resolves to `BPY` when available, else `TRIMESH`
 
 Concrete `sharp_backend="AUTO"` behavior:
@@ -171,7 +167,7 @@ Concrete `sharp_backend="AUTO"` behavior:
 # Manifold Requirements
 `LIBIGL` decimation uses `igl.decimate(...)`. Per the libigl Python binding docs, it assumes a manifold mesh, possibly with boundary.
 
-This extension now checks manifoldness before `LIBIGL` decimation using:
+This extension checks manifoldness before `LIBIGL` decimation using:
 - `igl.is_edge_manifold(F)`
 - `igl.is_vertex_manifold(F)`
 
@@ -183,11 +179,6 @@ Behavior:
 Practical implication:
 - non-manifold meshes are not valid inputs for the strict `LIBIGL` decimation path
 - open meshes can still be acceptable as long as they remain manifold with boundary
-
-Additional libigl notes from the installed bindings:
-- `igl.is_edge_manifold(F)` reports whether every edge is incident to one or two oppositely oriented faces
-- `igl.is_vertex_manifold(F)` checks whether faces incident on each vertex form exactly one connected component
-- `igl.bfs_orient(F)` is available, but it is not currently used as an automatic repair step
 
 Reference docs:
 - https://libigl.github.io/libigl-python-bindings/igl_docs/
@@ -215,25 +206,6 @@ Current behavior:
 
 The internal pipeline still operates on filesystem-backed OBJ and `.sharp` files, but nodes no longer have to communicate only through bare path strings.
 
-Actual artifact fields:
-- mesh artifact:
-  - `obj_path`
-  - `vertices`
-  - `faces`
-  - `workspace_dir`
-  - `source_path`
-  - `backend`
-  - `label`
-  - `metadata`
-- sharp artifact:
-  - `sharp_features_path`
-  - `feature_rows`
-  - `mesh_obj_path`
-  - `workspace_dir`
-  - `backend`
-  - `label`
-  - `metadata`
-
 # Cache Behavior
 - `use_cache=true` skips the `QRemeshify OBJ` remesh-and-trace stages and reruns only quadrangulation
 - it reuses the existing `_rem_p0.obj` traced mesh from the same `output_dir`
@@ -250,6 +222,7 @@ Python packages:
 - `bpy` optional but preferred for Blender-faithful preprocessing
 - `libigl`
 - `trimesh`
+- `fast-simplification` optional, required for `TRIMESH` decimation
 - `numpy`
 
 Runtime assets bundled with this extension:
@@ -259,11 +232,16 @@ Runtime assets bundled with this extension:
 Install the Python dependencies into ComfyUI's environment:
 
 ```powershell
+# either from ComfyUI terminal or with ComfyUI python venv activated
 pip install -r requirements.txt
 ```
 
 # Installation
 1. Place this repository under `ComfyUI/custom_nodes/`
+   ```bash
+   cd $HOME/ComfyUI/custom_nodes # or your ComfyUI installation directory
+   git clone https://github.com/akashskypatel/ComfyUI-QRemeshify.git
+   ```
 2. Install Python dependencies in the ComfyUI venv:
 
 ```powershell
@@ -280,25 +258,17 @@ Current practical support:
 - `QRemeshify Mesh To OBJ`: accepts `FILE_3D` or `MESH` through the node UI, then converts to OBJ through the selected backend
 - `QRemeshify OBJ`: uploaded/selected `.obj` through the node UI, or a resolved OBJ path via `mesh_artifact`
 
-Implementation note:
-- internal helpers still accept path strings for compatibility with artifact materialization and internal calls, but that is not the primary user-facing socket contract for the preprocess/mesh-to-OBJ nodes
-
 Common pattern:
 - load `GLB`, `GLTF`, `STL`, `PLY`, `OBJ`, or another supported format in `Load3D` or another upstream node
 - pass `model_3d` or `MESH` into `QRemeshify Preprocess Mesh`
 - pass the returned artifacts into `QRemeshify OBJ`
 
 # Current Limitations
-- Symmetry preprocessing is implemented only on the `BPY` path
-- `TRIMESH` is not a decimation backend
+- Symmetry preprocessing is implemented only on `BPY` backend
 - `LIBIGL` decimation requires a manifold triangle mesh
-- the currently installed `libigl` build in the validated environment does not expose `igl.sharp_edges`, so `LIBIGL` sharp-feature generation currently requires either a different libigl build or `allow_backend_fallback=true`
+- `TRIMESH` decimation depends on trimesh's quadric-decimation support being installed and working in the active Python environment, which typically requires `fast-simplification`
 - `.rosy` and the native tracing/quadrangulation stages remain file-backed internally
-- The backend contract is still OBJ / `.sharp` file-based internally even though node-to-node contracts can now use richer artifacts
-- Blender-backed preprocessing requires `bpy` to be installed in the exact Python environment ComfyUI is using
-- Sharp-feature generation depends on the selected backend being available in the same Python environment ComfyUI is using
-- Convexity inference in the generated `.sharp` file may need refinement for meshes with inconsistent winding
-- `use_cache=true` only skips remesh/trace when the expected traced intermediate already exists in the chosen `output_dir`
+- All dependencies must be installed under ComfyUI's python environment.
 
 # Tips
 - Keep meshes reasonably sized; remeshing cost grows quickly with mesh complexity

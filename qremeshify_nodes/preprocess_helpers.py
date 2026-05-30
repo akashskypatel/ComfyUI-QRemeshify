@@ -188,6 +188,62 @@ def resolve_decimate_target_faces(
     return face_count
 
 
+def decimate_mesh_with_trimesh(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    decimate_target_faces: int,
+    decimate_ratio: float,
+) -> tuple[np.ndarray, np.ndarray, bool, int]:
+    """Decimate mesh using trimesh quadric decimation.
+
+    Args:
+        vertices: Vertex coordinates
+        faces: Face indices
+        decimate_target_faces: Target number of faces
+        decimate_ratio: Decimation ratio
+
+    Returns:
+        Tuple of (reduced_vertices, reduced_faces, reached_target, target_faces)
+    """
+    target_faces = resolve_decimate_target_faces(
+        len(faces),
+        decimate_target_faces,
+        decimate_ratio,
+    )
+    if target_faces >= len(faces):
+        return vertices, faces, True, target_faces
+
+    try:
+        import trimesh
+    except ImportError as exc:  # pragma: no cover
+        raise QRemeshifyError(
+            "backend='TRIMESH' requires the 'trimesh' Python package to be installed"
+        ) from exc
+
+    mesh = trimesh.Trimesh(
+        vertices=np.asarray(vertices, dtype=np.float64),
+        faces=np.asarray(faces, dtype=np.int64),
+        process=False,
+    )
+    try:
+        simplified = mesh.simplify_quadric_decimation(face_count=int(target_faces))
+    except BaseException as exc:  # pragma: no cover
+        raise QRemeshifyError(
+            "TRIMESH decimation failed. Install trimesh's quadric decimation dependency "
+            "with `pip install fast-simplification` in the active ComfyUI environment."
+        ) from exc
+
+    reduced_vertices = np.asarray(simplified.vertices, dtype=np.float64)
+    reduced_faces = np.asarray(simplified.faces, dtype=np.int64)
+    if reduced_vertices.size == 0 or reduced_faces.size == 0:
+        raise QRemeshifyError("TRIMESH decimation returned an empty mesh")
+    if reduced_vertices.ndim != 2 or reduced_vertices.shape[1] != 3:
+        raise QRemeshifyError("TRIMESH decimation returned vertices with an unexpected shape")
+    if reduced_faces.ndim != 2 or reduced_faces.shape[1] != 3:
+        raise QRemeshifyError("TRIMESH decimation returned faces with an unexpected shape")
+    return reduced_vertices, reduced_faces, len(reduced_faces) <= target_faces, target_faces
+
+
 def decimate_mesh_with_libigl(
     vertices: np.ndarray,
     faces: np.ndarray,
@@ -354,6 +410,8 @@ def preprocess_mesh_input(
             resolved_backend = "BPY"
         elif decimate_requested and libigl_available():
             resolved_backend = "LIBIGL"
+        elif decimate_requested:
+            resolved_backend = "TRIMESH"
         else:
             resolved_backend = "BPY" if bpy_available() else "TRIMESH"
     elif backend == "BPY" and not bpy_available():
@@ -361,13 +419,12 @@ def preprocess_mesh_input(
             if decimate_requested and not symmetry_requested and libigl_available():
                 resolved_backend = "LIBIGL"
                 backend_fallback_used = True
-            elif not decimate_requested:
+            elif decimate_requested:
                 resolved_backend = "TRIMESH"
                 backend_fallback_used = True
             else:
-                raise QRemeshifyError(
-                    "backend='BPY' is unavailable and no compatible fallback backend is available"
-                )
+                resolved_backend = "TRIMESH"
+                backend_fallback_used = True
         else:
             raise QRemeshifyError(
                 "backend='BPY' requires Blender's Python modules to be installed and importable"
@@ -393,7 +450,7 @@ def preprocess_mesh_input(
             raise QRemeshifyError(
                 "Symmetry preprocessing requires backend='BPY' unless backend fallback is enabled"
             )
-    if decimate_requested and resolved_backend not in ("BPY", "LIBIGL"):
+    if decimate_requested and resolved_backend not in ("BPY", "LIBIGL", "TRIMESH"):
         if allow_backend_fallback:
             if bpy_available():
                 resolved_backend = "BPY"
@@ -402,12 +459,11 @@ def preprocess_mesh_input(
                 resolved_backend = "LIBIGL"
                 backend_fallback_used = True
             else:
-                raise QRemeshifyError(
-                    "Decimation requires backend='BPY' or backend='LIBIGL', and no compatible fallback backend is available"
-                )
+                resolved_backend = "TRIMESH"
+                backend_fallback_used = True
         else:
             raise QRemeshifyError(
-                "Decimation requires backend='BPY' or backend='LIBIGL' unless backend fallback is enabled"
+                "Decimation requires backend='BPY', backend='LIBIGL', or backend='TRIMESH' unless backend fallback is enabled"
             )
 
     metadata = {
@@ -481,20 +537,21 @@ def preprocess_mesh_input(
             if resolved_backend == "LIBIGL":
                 write_triangle_obj_with_libigl(output_obj_path, vertices, faces)
                 vertices, faces = mesh_arrays_to_lists(vertices, faces)
+        elif resolved_backend == "TRIMESH":
+            if decimate_requested:
+                vertices, faces, decimate_reached_target, decimate_target_resolved = (
+                    decimate_mesh_with_trimesh(
+                        vertices,
+                        faces,
+                        decimate_target_faces,
+                        decimate_ratio,
+                    )
+                )
+            write_triangle_obj(output_obj_path, vertices, faces)
+            vertices, faces = mesh_arrays_to_lists(vertices, faces)
         else:
             write_triangle_obj(output_obj_path, vertices, faces)
             vertices, faces = mesh_arrays_to_lists(vertices, faces)
-    elif (
-        source_mesh.suffix.lower() == ".obj"
-        and resolved_backend == "TRIMESH"
-        and source_mesh != output_obj_path
-    ):
-        output_obj_path.write_bytes(source_mesh.read_bytes())
-        vertices, faces = parse_obj_payload(str(output_obj_path))
-    elif source_mesh.suffix.lower() == ".obj" and resolved_backend == "TRIMESH":
-        vertices, faces = parse_obj_payload(str(source_mesh))
-        if source_mesh != output_obj_path:
-            output_obj_path.write_bytes(source_mesh.read_bytes())
     elif resolved_backend == "BPY":
         preprocess_mesh_with_bpy(
             source_mesh,
@@ -543,10 +600,21 @@ def preprocess_mesh_input(
         if resolved_backend == "LIBIGL":
             write_triangle_obj_with_libigl(output_obj_path, vertices, faces)
             vertices, faces = mesh_arrays_to_lists(vertices, faces)
-    else:
+    elif resolved_backend == "TRIMESH":
         vertices, faces = load_triangle_mesh_with_trimesh(source_mesh)
+        if decimate_requested:
+            vertices, faces, decimate_reached_target, decimate_target_resolved = (
+                decimate_mesh_with_trimesh(
+                    vertices,
+                    faces,
+                    decimate_target_faces,
+                    decimate_ratio,
+                )
+            )
         write_triangle_obj(output_obj_path, vertices, faces)
         vertices, faces = mesh_arrays_to_lists(vertices, faces)
+    else:
+        raise QRemeshifyError(f"Unsupported preprocessing backend: {resolved_backend}")
 
     metadata["face_count"] = str(len(faces))
     metadata["vertex_count"] = str(len(vertices))

@@ -1,3 +1,4 @@
 bpy
 libigl
 trimesh
+fast-simplification
