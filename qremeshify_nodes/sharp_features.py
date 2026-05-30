@@ -12,6 +12,14 @@ from .mesh_io import compute_face_normals, load_triangle_mesh_with_trimesh, writ
 
 
 def _require_igl():
+    """Require libigl to be installed.
+    
+    Returns:
+        libigl module
+        
+    Raises:
+        QRemeshifyError: If libigl is not installed
+    """
     try:
         import igl
     except ImportError as exc:  # pragma: no cover
@@ -22,6 +30,11 @@ def _require_igl():
 
 
 def libigl_sharp_edges_available() -> bool:
+    """Check if libigl sharp_edges is available.
+    
+    Returns:
+        True if sharp_edges is available, False otherwise
+    """
     try:
         igl = _require_igl()
     except QRemeshifyError:
@@ -30,6 +43,14 @@ def libigl_sharp_edges_available() -> bool:
 
 
 def _require_igl_sharp_edges():
+    """Require libigl sharp_edges to be available.
+    
+    Returns:
+        libigl module
+        
+    Raises:
+        QRemeshifyError: If sharp_edges is not available
+    """
     igl = _require_igl()
     if not hasattr(igl, "sharp_edges"):
         raise QRemeshifyError(
@@ -39,6 +60,17 @@ def _require_igl_sharp_edges():
 
 
 def load_triangle_mesh_with_libigl(mesh_path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Load a triangle mesh using libigl.
+    
+    Args:
+        mesh_path: Path to the mesh file
+        
+    Returns:
+        Tuple of (vertices, faces)
+        
+    Raises:
+        QRemeshifyError: If libigl could not load the mesh
+    """
     igl = _require_igl()
     vertices, faces = igl.read_triangle_mesh(str(mesh_path))
     vertices = np.asarray(vertices, dtype=np.float64)
@@ -57,6 +89,16 @@ def load_triangle_mesh_with_libigl(mesh_path: Path) -> tuple[np.ndarray, np.ndar
 def write_triangle_obj_with_libigl(
     obj_path: Path, vertices: np.ndarray, faces: np.ndarray
 ) -> None:
+    """Write a triangle mesh to an OBJ file using libigl.
+    
+    Args:
+        obj_path: Path to the OBJ file
+        vertices: Vertex coordinates
+        faces: Face indices
+        
+    Raises:
+        QRemeshifyError: If libigl could not write the OBJ file
+    """
     igl = _require_igl()
     written = igl.write_obj(
         str(obj_path),
@@ -73,6 +115,17 @@ def collect_sharp_feature_lines(
     sharp_edge_keys: set[tuple[int, int]],
     include_boundaries: bool,
 ) -> list[str]:
+    """Collect sharp feature lines from a mesh.
+    
+    Args:
+        vertices: Vertex coordinates
+        faces: Face indices
+        sharp_edge_keys: Set of sharp edge keys
+        include_boundaries: Include boundary edges
+        
+    Returns:
+        List of sharp feature lines
+    """
     face_normals = compute_face_normals(vertices, faces)
     edge_to_occurrences: dict[tuple[int, int], list[tuple[int, int, tuple[int, int]]]] = {}
     for face_index, face in enumerate(faces):
@@ -109,6 +162,15 @@ def collect_sharp_feature_lines(
 
 
 def write_sharp_feature_file(output_path: Path, feature_lines: list[str]) -> Path:
+    """Write sharp feature lines to a file.
+    
+    Args:
+        output_path: Path to the output file
+        feature_lines: List of feature lines
+        
+    Returns:
+        Path to the output file
+    """
     with output_path.open("w", encoding="utf-8") as handle:
         handle.write(f"{len(feature_lines)}\n")
         for line in feature_lines:
@@ -117,6 +179,16 @@ def write_sharp_feature_file(output_path: Path, feature_lines: list[str]) -> Pat
 
 
 def generate_sharp_features_with_libigl(obj_path: Path, sharp_angle: float, output_path: Path) -> Path:
+    """Generate sharp features using libigl.
+    
+    Args:
+        obj_path: Path to the input OBJ file
+        sharp_angle: Sharp angle threshold
+        output_path: Path to the output sharp features file
+        
+    Returns:
+        Path to the output sharp features file
+    """
     igl = _require_igl_sharp_edges()
     vertices, faces = load_triangle_mesh_with_libigl(obj_path)
     write_triangle_obj_with_libigl(obj_path, vertices, faces)
@@ -139,6 +211,20 @@ def generate_sharp_features_with_trimesh(
     sharp_angle: float,
     output_path: Path,
 ) -> Path:
+    """Generate sharp features using trimesh.
+    
+    Args:
+        mesh_path: Path to the input mesh file
+        normalized_obj_path: Path to the normalized OBJ file
+        sharp_angle: Sharp angle threshold
+        output_path: Path to the output sharp features file
+        
+    Returns:
+        Path to the output sharp features file
+        
+    Raises:
+        QRemeshifyError: If trimesh is not installed
+    """
     try:
         import trimesh
     except ImportError as exc:  # pragma: no cover
@@ -167,6 +253,21 @@ def generate_sharp_features(
     output_path: Path,
     backend: str,
 ) -> Path:
+    """Generate sharp features for a mesh.
+    
+    Args:
+        mesh_path: Path to the input mesh file
+        normalized_obj_path: Path to the normalized OBJ file
+        sharp_angle: Sharp angle threshold
+        output_path: Path to the output sharp features file
+        backend: Backend to use ("BPY", "LIBIGL", or "TRIMESH")
+        
+    Returns:
+        Path to the output sharp features file
+        
+    Raises:
+        QRemeshifyError: If the backend is not supported or if required packages are not installed
+    """
     if backend == "BPY":
         return normalize_mesh_and_generate_sharp_with_bpy(
             mesh_path,
