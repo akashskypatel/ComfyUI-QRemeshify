@@ -27,6 +27,8 @@ from .errors import QRemeshifyError
 
 
 class Parameters(Structure):
+    """Parameters structure for QRemeshify backend."""
+    
     _fields_ = [
         ("remesh", c_bool),
         ("sharpAngle", c_float),
@@ -38,6 +40,8 @@ class Parameters(Structure):
 
 
 class QRParameters(Structure):
+    """QRemeshify parameters structure."""
+    
     _fields_ = [
         ("useFlowSolver", c_bool),
         ("flow_config_filename", c_char_p),
@@ -78,6 +82,11 @@ class QRParameters(Structure):
 
 
 def default_qr_parameters() -> QRParameters:
+    """Create default QRemeshify parameters.
+    
+    Returns:
+        QRParameters: Default QRemeshify parameters
+    """
     callback_time_limit = [3.0, 5.0, 10.0, 20.0, 30.0, 60.0, 90.0, 120.0]
     callback_gap_limit = [0.005, 0.02, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
 
@@ -122,7 +131,14 @@ def default_qr_parameters() -> QRParameters:
 
 
 class QuadwildBackend:
+    """Quadwild backend for mesh processing."""
+    
     def __init__(self, mesh_path: Path) -> None:
+        """Initialize the Quadwild backend.
+        
+        Args:
+            mesh_path: Path to the mesh file
+        """
         if not mesh_path:
             raise QRemeshifyError("mesh_path is empty")
         if not BACKEND_DIR.exists():
@@ -183,6 +199,13 @@ class QuadwildBackend:
     def remesh_and_field(
         self, remesh: bool, sharp_features_path: str, sharp_angle: float
     ) -> None:
+        """Remesh and field the mesh.
+        
+        Args:
+            remesh: Whether to remesh
+            sharp_features_path: Path to sharp features file
+            sharp_angle: Sharp angle
+        """
         sharp_path = (
             sharp_features_path if sharp_features_path else str(self.sharp_path)
         )
@@ -210,6 +233,7 @@ class QuadwildBackend:
             )
 
     def trace(self) -> None:
+        """Trace the remeshed mesh."""
         try:
             success = self.quadwild.trace2(
                 str(self.remeshed_path.with_suffix("")).encode("utf-8")
@@ -247,6 +271,33 @@ class QuadwildBackend:
         callback_time_limit: list[float],
         callback_gap_limit: list[float],
     ) -> None:
+        """Quadrangulate the mesh.
+        
+        Args:
+            enable_smoothing: Whether to enable smoothing
+            scale_fact: Scale factor
+            fixed_chart_clusters: Fixed chart clusters
+            alpha: Alpha
+            ilp_method: ILP method
+            time_limit: Time limit
+            gap_limit: Gap limit
+            minimum_gap: Minimum gap
+            isometry: Whether to use isometry
+            regularity_quadrilaterals: Whether to use regularity for quadrilaterals
+            regularity_non_quadrilaterals: Whether to use regularity for non-quadrilaterals
+            regularity_non_quadrilaterals_weight: Regularity weight for non-quadrilaterals
+            align_singularities: Whether to align singularities
+            align_singularities_weight: Align weight for singularities
+            repeat_losing_constraints_iterations: Whether to repeat losing constraints for iterations
+            repeat_losing_constraints_quads: Whether to repeat losing constraints for quadrilaterals
+            repeat_losing_constraints_non_quads: Whether to repeat losing constraints for non-quadrilaterals
+            repeat_losing_constraints_align: Whether to repeat losing constraints for alignment
+            hard_parity_constraint: Whether to use hard parity constraint
+            flow_config: Flow configuration file
+            satsuma_config: Satsuma configuration file
+            callback_time_limit: Callback time limit
+            callback_gap_limit: Callback gap limit
+        """
         params = default_qr_parameters()
         params.alpha = alpha
         params.ilpMethod = ILP_METHODS[ilp_method]
