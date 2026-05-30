@@ -15,7 +15,18 @@ SHARP_ARTIFACT_TYPE = "QREMESHIFY_SHARP"
 
 @dataclass(slots=True)
 class QRemeshifyMeshArtifact:
-    """Structured mesh artifact passed between ComfyUI nodes."""
+    """Structured mesh artifact passed between ComfyUI nodes.
+    
+    Attributes:
+        obj_path: Path to the OBJ file
+        vertices: List of vertex coordinates
+        faces: List of face indices
+        workspace_dir: Workspace directory
+        source_path: Source path
+        backend: Backend used
+        label: Label for the artifact
+        metadata: Additional metadata
+    """
 
     obj_path: str
     vertices: list[list[float]] = field(default_factory=list)
@@ -29,7 +40,17 @@ class QRemeshifyMeshArtifact:
 
 @dataclass(slots=True)
 class QRemeshifySharpArtifact:
-    """Structured sharp-feature artifact passed between ComfyUI nodes."""
+    """Structured sharp-feature artifact passed between ComfyUI nodes.
+    
+    Attributes:
+        sharp_features_path: Path to the sharp features file
+        feature_rows: List of feature rows
+        mesh_obj_path: Path to the mesh OBJ file
+        workspace_dir: Workspace directory
+        backend: Backend used
+        label: Label for the artifact
+        metadata: Additional metadata
+    """
 
     sharp_features_path: str
     feature_rows: list[list[int]] = field(default_factory=list)
@@ -50,6 +71,22 @@ def build_mesh_artifact(
     label: str = "",
     metadata: dict[str, str] | None = None,
 ) -> QRemeshifyMeshArtifact:
+    """
+    Build a mesh artifact for ComfyUI.
+    
+    Args:
+        obj_path: Path to the OBJ file
+        vertices: List of vertex coordinates
+        faces: List of face indices
+        workspace_dir: Workspace directory
+        source_path: Source path
+        backend: Backend used
+        label: Label for the artifact
+        metadata: Additional metadata
+        
+    Returns:
+        QRemeshifyMeshArtifact: Structured mesh artifact
+    """
     return QRemeshifyMeshArtifact(
         obj_path=obj_path,
         vertices=vertices or [],
@@ -71,6 +108,21 @@ def build_sharp_artifact(
     label: str = "",
     metadata: dict[str, str] | None = None,
 ) -> QRemeshifySharpArtifact:
+    """
+    Build a sharp-feature artifact for ComfyUI.
+    
+    Args:
+        sharp_features_path: Path to the sharp features file
+        feature_rows: List of feature rows
+        mesh_obj_path: Path to the mesh OBJ file
+        workspace_dir: Workspace directory
+        backend: Backend used
+        label: Label for the artifact
+        metadata: Additional metadata
+        
+    Returns:
+        QRemeshifySharpArtifact: Structured sharp-feature artifact
+    """
     return QRemeshifySharpArtifact(
         sharp_features_path=sharp_features_path,
         feature_rows=feature_rows or [],
@@ -85,6 +137,16 @@ def build_sharp_artifact(
 def resolve_mesh_input(
     input_obj: str, mesh_artifact: QRemeshifyMeshArtifact | None
 ) -> str:
+    """
+    Resolve mesh path from artifact or direct input.
+    
+    Args:
+        input_obj: Direct mesh path
+        mesh_artifact: Mesh artifact
+        
+    Returns:
+        str: Resolved mesh path
+    """
     if mesh_artifact is not None and mesh_artifact.obj_path:
         return mesh_artifact.obj_path
     return input_obj
@@ -94,6 +156,16 @@ def resolve_sharp_input(
     sharp_features_path: str,
     sharp_artifact: QRemeshifySharpArtifact | None,
 ) -> str:
+    """
+    Resolve sharp features path from artifact or direct input.
+    
+    Args:
+        sharp_features_path: Direct sharp features path
+        sharp_artifact: Sharp features artifact
+        
+    Returns:
+        str: Resolved sharp features path
+    """
     if sharp_artifact is not None and sharp_artifact.sharp_features_path:
         return sharp_artifact.sharp_features_path
     return sharp_features_path
@@ -102,6 +174,16 @@ def resolve_sharp_input(
 def materialize_mesh_artifact(
     mesh_artifact: QRemeshifyMeshArtifact, target_path: str
 ) -> str:
+    """
+    Materialize mesh artifact to target path.
+    
+    Args:
+        mesh_artifact: Mesh artifact to materialize
+        target_path: Target path for the mesh
+        
+    Returns:
+        str: Path to the materialized mesh
+    """
     if mesh_artifact.vertices and mesh_artifact.faces:
         vertices = np.asarray(mesh_artifact.vertices, dtype=np.float64)
         faces = np.asarray(mesh_artifact.faces, dtype=np.int64)
@@ -119,6 +201,16 @@ def materialize_mesh_artifact(
 def materialize_sharp_artifact(
     sharp_artifact: QRemeshifySharpArtifact, target_path: str
 ) -> str:
+    """
+    Materialize sharp artifact to target path.
+    
+    Args:
+        sharp_artifact: Sharp artifact to materialize
+        target_path: Target path for the sharp features
+        
+    Returns:
+        str: Path to the materialized sharp features
+    """
     if sharp_artifact.feature_rows:
         destination = Path(target_path)
         with destination.open("w", encoding="utf-8") as handle:
@@ -136,6 +228,15 @@ def materialize_sharp_artifact(
 
 
 def parse_obj_payload(obj_path: str) -> tuple[list[list[float]], list[list[int]]]:
+    """
+    Parse OBJ file to extract vertices and faces.
+    
+    Args:
+        obj_path: Path to the OBJ file
+        
+    Returns:
+        tuple[list[list[float]], list[list[int]]]: Vertices and faces
+    """
     vertices: list[list[float]] = []
     faces: list[list[int]] = []
     for line in (
@@ -157,6 +258,15 @@ def parse_obj_payload(obj_path: str) -> tuple[list[list[float]], list[list[int]]
 
 
 def parse_sharp_payload(sharp_path: str) -> list[list[int]]:
+    """
+    Parse sharp features file to extract feature rows.
+    
+    Args:
+        sharp_path: Path to the sharp features file
+        
+    Returns:
+        list[list[int]]: List of feature rows
+    """
     rows: list[list[int]] = []
     lines = Path(sharp_path).read_text(encoding="utf-8", errors="ignore").splitlines()
     for line in lines[1:]:
@@ -169,4 +279,14 @@ def parse_sharp_payload(sharp_path: str) -> list[list[int]]:
 def mesh_arrays_to_lists(
     vertices: np.ndarray, faces: np.ndarray
 ) -> tuple[list[list[float]], list[list[int]]]:
+    """
+    Convert numpy arrays to lists for artifact storage.
+    
+    Args:
+        vertices: Numpy array of vertices
+        faces: Numpy array of faces
+        
+    Returns:
+        tuple[list[list[float]], list[list[int]]]: Vertices and faces as lists
+    """
     return vertices.tolist(), faces.tolist()
