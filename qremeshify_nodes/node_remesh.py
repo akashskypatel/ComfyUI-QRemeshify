@@ -47,25 +47,25 @@ class QRemeshifyOBJ(IO.ComfyNode):
                 ),
                 IO.Boolean.Input("smooth", default=True, tooltip="Apply smoothing to the mesh"),
                 IO.Float.Input(
-                    "sharp_angle", default=35.0, min=0.0, max=180.0, step=0.1, tooltip="Sharp angle threshold for feature preservation"
+                    "sharp_angle", default=35.0, min=0.0, max=180.0, step=0.1, tooltip="Sharp angle threshold for feature preservation (0.0-180.0)"
                 ),
                 IO.Float.Input(
-                    "scale_factor", default=1.0, min=0.01, max=10.0, step=0.01, tooltip="Scale factor for the mesh"
+                    "scale_factor", default=1.0, min=0.01, max=10.0, step=0.01, tooltip="Scale factor for the mesh (0.01-10.0)"
                 ),
                 IO.Int.Input(
-                    "fixed_chart_clusters", default=0, min=0, max=100000, step=1, tooltip="Fixed chart clusters"
+                    "fixed_chart_clusters", default=0, min=0, max=100000, step=1, tooltip="Fixed chart clusters (0-100000)"
                 ),
-                IO.Float.Input("alpha", default=0.005, min=0.0, max=0.999, step=0.001, tooltip="Alpha parameter for remeshing"),
+                IO.Float.Input("alpha", default=0.005, min=0.0, max=0.999, step=0.001, tooltip="Alpha parameter for remeshing (0.0-0.999)"),
                 IO.Combo.Input(
                     "ilp_method",
                     options=["LEASTSQUARES", "ABS"],
                     default="LEASTSQUARES",
                     tooltip="ILP method for remeshing"
                 ),
-                IO.Int.Input("time_limit", default=200, min=1, max=86400, step=1, tooltip="Time limit for remeshing"),
-                IO.Float.Input("gap_limit", default=0.0, min=0.0, max=1.0, step=0.001, tooltip="Gap limit for remeshing"),
+                IO.Int.Input("time_limit", default=200, min=1, max=86400, step=1, tooltip="Time limit for remeshing (1-86400)"),
+                IO.Float.Input("gap_limit", default=0.0, min=0.0, max=1.0, step=0.001, tooltip="Gap limit for remeshing (0.0-1.0)"),
                 IO.Float.Input(
-                    "minimum_gap", default=0.4, min=0.0, max=1.0, step=0.001, tooltip="Minimum gap for remeshing"
+                    "minimum_gap", default=0.4, min=0.0, max=1.0, step=0.001, tooltip="Minimum gap for remeshing (0.0-1.0)"
                 ),
                 IO.Boolean.Input("isometry", default=True, tooltip="Apply isometry to the mesh"),
                 IO.Boolean.Input("regularity_quadrilaterals", default=True, tooltip="Apply regularity to quadrilaterals"),
