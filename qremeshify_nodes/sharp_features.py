@@ -8,25 +8,13 @@ import numpy as np
 
 from .blender_backend import normalize_mesh_and_generate_sharp_with_bpy
 from .errors import QRemeshifyError
+from .libigl_compat import require_igl, write_triangle_obj_with_libigl
 from .mesh_io import compute_face_normals, load_triangle_mesh_with_trimesh, write_triangle_obj
 
 
 def _require_igl():
-    """Require libigl to be installed.
-    
-    Returns:
-        libigl module
-        
-    Raises:
-        QRemeshifyError: If libigl is not installed
-    """
-    try:
-        import igl
-    except ImportError as exc:  # pragma: no cover
-        raise QRemeshifyError(
-            "backend='LIBIGL' requires the 'libigl' Python package to be installed"
-        ) from exc
-    return igl
+    """Require libigl to be installed."""
+    return require_igl()
 
 
 def libigl_sharp_edges_available() -> bool:
@@ -84,29 +72,6 @@ def load_triangle_mesh_with_libigl(mesh_path: Path) -> tuple[np.ndarray, np.ndar
             "backend='LIBIGL' requires a triangle mesh; non-triangular faces were returned"
         )
     return vertices, faces
-
-
-def write_triangle_obj_with_libigl(
-    obj_path: Path, vertices: np.ndarray, faces: np.ndarray
-) -> None:
-    """Write a triangle mesh to an OBJ file using libigl.
-    
-    Args:
-        obj_path: Path to the OBJ file
-        vertices: Vertex coordinates
-        faces: Face indices
-        
-    Raises:
-        QRemeshifyError: If libigl could not write the OBJ file
-    """
-    igl = _require_igl()
-    written = igl.write_obj(
-        str(obj_path),
-        np.asarray(vertices, dtype=np.float64),
-        np.asarray(faces, dtype=np.int32),
-    )
-    if written is False:
-        raise QRemeshifyError(f"libigl could not write OBJ output: {obj_path}")
 
 
 def collect_sharp_feature_lines(

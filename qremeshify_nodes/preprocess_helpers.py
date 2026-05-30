@@ -15,6 +15,7 @@ from .artifacts import (
 )
 from .blender_backend import bpy_available, preprocess_mesh_with_bpy
 from .errors import QRemeshifyError
+from .libigl_compat import require_igl, write_triangle_obj_with_libigl
 from .mesh_io import (
     load_triangle_mesh_with_trimesh,
     prepare_mesh_workspace,
@@ -101,18 +102,8 @@ def libigl_available() -> bool:
 
 
 def _require_igl():
-    """Require libigl to be available.
-    
-    Raises:
-        QRemeshifyError: If libigl is not installed
-    """
-    try:
-        import igl
-    except ImportError as exc:  # pragma: no cover
-        raise QRemeshifyError(
-            "backend='LIBIGL' requires the 'libigl' Python package to be installed"
-        ) from exc
-    return igl
+    """Require libigl to be available."""
+    return require_igl()
 
 
 def load_triangle_mesh_with_libigl(mesh_path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -140,29 +131,6 @@ def load_triangle_mesh_with_libigl(mesh_path: Path) -> tuple[np.ndarray, np.ndar
             "backend='LIBIGL' requires a triangle mesh; non-triangular faces were returned"
         )
     return vertices, faces
-
-
-def write_triangle_obj_with_libigl(
-    obj_path: Path, vertices: np.ndarray, faces: np.ndarray
-) -> None:
-    """Write triangle mesh to OBJ file using libigl.
-    
-    Args:
-        obj_path: Output OBJ file path
-        vertices: Vertex coordinates
-        faces: Face indices
-        
-    Raises:
-        QRemeshifyError: If libigl fails to write the OBJ file
-    """
-    igl = _require_igl()
-    written = igl.write_obj(
-        str(obj_path),
-        np.asarray(vertices, dtype=np.float64),
-        np.asarray(faces, dtype=np.int32),
-    )
-    if written is False:
-        raise QRemeshifyError(f"libigl could not write OBJ output: {obj_path}")
 
 
 def resolve_decimate_target_faces(

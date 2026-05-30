@@ -18,9 +18,9 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
             category=NODE_CATEGORY,
             description="Normalize and optionally preprocess a mesh before remeshing. "
             "Normalizes a mesh into a triangle OBJ and can optionally: "
-            "  1. Apply symmetry along X, Y, or Z axes"
-            "  2. Decimate the mesh to reduce face count"
-            "  3. Generate sharp features for better remeshing",
+            "  1. Apply symmetry along X, Y, or Z axes (Only available with BPY backend)"
+            "  2. Decimate the mesh to reduce face count (TRIMESH backend requires fast-simplification package to be installed)"
+            "  3. Generate sharp features for better remeshing (Only available with BPY and TRIMESH backend)",
             inputs=[
                 IO.MultiType.Input(
                     IO.Combo.Input(
