@@ -44,18 +44,22 @@ def list_input_3d_files(
     Returns:
         List of normalized file paths
     """
-    input_dir = os.path.join(folder_paths.get_input_directory(), "3d")
-    os.makedirs(input_dir, exist_ok=True)
-
-    input_path = Path(input_dir)
-    base_path = Path(folder_paths.get_input_directory())
-    suffixes = allowed_suffixes or SUPPORTED_3D_SUFFIXES
-    return [
-        normalize_path(str(file_path.relative_to(base_path)))
-        for file_path in input_path.rglob("*")
-        if file_path.suffix.lower() in suffixes
+    check_dirs = [
+        folder_paths.get_input_directory(),
+        folder_paths.get_output_directory(),
     ]
+    _3d_files = []
 
+    for check_dir in check_dirs:
+        if not os.path.exists(check_dir):
+            os.makedirs(check_dir, exist_ok=True)
+        base_path = Path(check_dir).parent.absolute().resolve()
+        suffixes = allowed_suffixes or SUPPORTED_3D_SUFFIXES
+        for file_path in Path(check_dir).rglob("*"):
+            if file_path.suffix.lower() in suffixes:
+                _3d_files.append(normalize_path(str(file_path.relative_to(base_path))))
+    
+    return _3d_files
 
 def resolve_selected_model_path(model_file: str) -> Path | None:
     """Resolve selected model path from file path.

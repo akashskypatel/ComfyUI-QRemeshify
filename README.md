@@ -44,6 +44,7 @@ Outputs:
 - `mesh_artifact`
 - `sharp_features_path`
 - `sharp_artifact`
+- `mesh_info`
 
 ## `QRemeshify Mesh To OBJ`
 Utility/debug node that converts a mesh input into an OBJ file for downstream nodes.
@@ -121,6 +122,41 @@ Wire them like this:
 This is the preferred workflow because the preprocess node writes the normalized triangle OBJ internally, and the `.sharp` file indices must match the exact OBJ consumed by the backend.
 It is also the recommended place to decimate high-poly meshes before invoking the native QuadWild remeshing stages.
 
+# Mesh Info Output
+`QRemeshify Preprocess Mesh` returns a `mesh_info` markdown output that summarizes both mesh structure and mesh health for the input and the preprocessed result.
+
+It currently includes two sections:
+- `Mesh Stats`
+- `Mesh Health`
+
+`Mesh Stats` reports:
+- `Vertices`: vertex count
+- `Faces`: polygon/triangle face count in the current representation
+- `Edges`: unique undirected edge count
+- `Tris`: faces with 3 vertices
+- `Quads`: faces with 4 vertices
+
+`Mesh Health` reports:
+- `Status`: overall quick classification
+  - `HEALTHY`: no obvious topology red flags were found by the current checks
+  - `WARN`: the mesh has issues that may still be workable, but can reduce decimation or remeshing quality
+  - `RISKY`: the mesh has stronger signs of problematic topology and is more likely to fail or decimate poorly
+- `Degenerate Faces`: faces with repeated indices, invalid indices, or near-zero area
+- `Duplicate Faces`: repeated faces occupying the same topology
+- `Boundary Edges`: edges used by only one face; indicates open boundaries
+- `Non-Manifold Edges`: edges used by more than two faces; a common cause of unstable downstream operations
+- `Unreferenced Vertices`: vertices not used by any face
+- `Connected Components`: disconnected mesh islands
+- `Watertight`: `true` when no boundary or non-manifold edges were detected by the current checks
+- `Loose Edges`: BPY-only metric for edges not attached to any face
+- `Loose Vertices`: BPY-only metric for vertices not attached to any edge
+
+Practical interpretation:
+- high `Degenerate Faces`, `Duplicate Faces`, or `Non-Manifold Edges` often explains poor decimation behavior on AI-generated meshes
+- a high `Connected Components` count often indicates many floating fragments or disconnected islands
+- `Watertight=false` does not automatically mean the mesh is unusable, but it is a useful warning sign for preprocessing quality
+- `WARN` or `RISKY` meshes should usually be cleaned or simplified before heavy remeshing
+
 Optional utility workflow:
 
 1. `QRemeshify Mesh To OBJ`
@@ -182,6 +218,7 @@ Behavior:
 Practical implication:
 - non-manifold meshes are not valid inputs for the strict `LIBIGL` decimation path
 - open meshes can still be acceptable as long as they remain manifold with boundary
+- the preprocess `mesh_info` output is a good first place to check whether an input mesh is likely to behave poorly during decimation
 
 Reference docs:
 - https://libigl.github.io/libigl-python-bindings/igl_docs/

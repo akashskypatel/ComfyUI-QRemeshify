@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+from functools import partial
 from pathlib import Path
 
 
@@ -111,6 +113,8 @@ def _run_libigl_preprocess_backend(
     output_obj_path = Path(payload["output_obj_path"])
     decimate_requested = bool(payload.get("decimate_enabled"))
     igl = _import_repo_module("libigl_compat").require_igl()
+    mesh_health = _import_repo_module("mesh_health")
+    mesh_cleanup = _import_repo_module("mesh_cleanup")
     vertices, faces = igl.read_triangle_mesh(str(mesh_path))
     vertices = np.asarray(vertices, dtype=np.float64)
     faces = np.asarray(faces, dtype=np.int64)
@@ -121,6 +125,15 @@ def _run_libigl_preprocess_backend(
     vertex_result = igl.is_vertex_manifold(np.asarray(faces, dtype=np.int64))
     vertex_manifold = bool(np.all(np.asarray(vertex_result, dtype=bool)))
     input_stats = mesh_stats_from_arrays(vertices, faces)
+    input_health = mesh_health.analyze_mesh_arrays(vertices, faces)
+    vertices, faces = mesh_cleanup.cleanup_mesh_arrays(
+        vertices,
+        faces,
+        remove_degenerate_faces=bool(payload.get("remove_degenerate_faces")),
+        remove_duplicate_faces=bool(payload.get("remove_duplicate_faces")),
+        remove_unreferenced_vertices=bool(payload.get("remove_unreferenced_vertices")),
+        merge_duplicate_vertices=bool(payload.get("merge_duplicate_vertices")),
+    )
     if decimate_requested:
         target_faces = resolve_target_faces(
             len(faces),
@@ -147,10 +160,13 @@ def _run_libigl_preprocess_backend(
         faces,
     )
     output_stats = mesh_stats_from_arrays(vertices, faces)
+    output_health = mesh_health.analyze_mesh_arrays(vertices, faces)
     return {
         "output_obj_path": str(output_obj_path),
         "input_stats": input_stats,
         "output_stats": output_stats,
+        "input_health": input_health,
+        "output_health": output_health,
         "decimate_reached_target": bool(decimate_reached_target),
         "decimate_target_resolved": int(target_faces),
         "edge_manifold": bool(edge_manifold),
@@ -171,6 +187,8 @@ def _run_trimesh_preprocess_backend(
     output_obj_path = Path(payload["output_obj_path"])
     decimate_requested = bool(payload.get("decimate_enabled"))
     mesh_io = _import_repo_module("mesh_io")
+    mesh_health = _import_repo_module("mesh_health")
+    mesh_cleanup = _import_repo_module("mesh_cleanup")
     try:
         import trimesh
     except ImportError as exc:  # pragma: no cover
@@ -180,6 +198,15 @@ def _run_trimesh_preprocess_backend(
 
     vertices, faces = mesh_io.load_triangle_mesh_with_trimesh(mesh_path)
     input_stats = mesh_stats_from_arrays(vertices, faces)
+    input_health = mesh_health.analyze_mesh_arrays(vertices, faces)
+    vertices, faces = mesh_cleanup.cleanup_mesh_arrays(
+        vertices,
+        faces,
+        remove_degenerate_faces=bool(payload.get("remove_degenerate_faces")),
+        remove_duplicate_faces=bool(payload.get("remove_duplicate_faces")),
+        remove_unreferenced_vertices=bool(payload.get("remove_unreferenced_vertices")),
+        merge_duplicate_vertices=bool(payload.get("merge_duplicate_vertices")),
+    )
     if decimate_requested:
         target_faces = resolve_target_faces(
             len(faces),
@@ -207,12 +234,24 @@ def _run_trimesh_preprocess_backend(
     else:
         target_faces = 0
         decimate_reached_target = True
+    if bool(payload.get("fill_holes")):
+        mesh = trimesh.Trimesh(
+            vertices=np.asarray(vertices, dtype=np.float64),
+            faces=np.asarray(faces, dtype=np.int64),
+            process=False,
+        )
+        mesh.fill_holes()
+        vertices = np.asarray(mesh.vertices, dtype=np.float64)
+        faces = np.asarray(mesh.faces, dtype=np.int64)
     mesh_io.write_triangle_obj(output_obj_path, vertices, faces)
     output_stats = mesh_stats_from_arrays(vertices, faces)
+    output_health = mesh_health.analyze_mesh_arrays(vertices, faces)
     return {
         "output_obj_path": str(output_obj_path),
         "input_stats": input_stats,
         "output_stats": output_stats,
+        "input_health": input_health,
+        "output_health": output_health,
         "decimate_reached_target": bool(decimate_reached_target),
         "decimate_target_resolved": int(target_faces),
     }
@@ -440,6 +479,7 @@ def resolve_backend_operation_handler(
     operation: str,
     *,
     QRemeshifyError,
+    _import_repo_module,
 ):
     """Resolve one backend operation handler from the centralized registry."""
     handlers = get_backend_operation_handlers(backend)
@@ -448,4 +488,10 @@ def resolve_backend_operation_handler(
         raise QRemeshifyError(
             f"Unsupported backend worker operation: backend={backend}, operation={operation}"
         )
-    return handler
+    signature = inspect.signature(handler)
+    bound_keywords = {}
+    if "QRemeshifyError" in signature.parameters:
+        bound_keywords["QRemeshifyError"] = QRemeshifyError
+    if "_import_repo_module" in signature.parameters:
+        bound_keywords["_import_repo_module"] = _import_repo_module
+    return partial(handler, **bound_keywords)

@@ -360,7 +360,7 @@ class QRemeshifyOBJ(IO.ComfyNode):
                     "high_poly_face_limit",
                     default=DEFAULT_HIGH_POLY_FACE_LIMIT,
                     min=0,
-                    max=50000000,
+                    max=100000,
                     step=1,
                     tooltip="Face-count guard for remeshing. If the input mesh exceeds this many faces, remeshing stops and suggests decimation in QRemeshify Preprocess Mesh. Set to 0 to disable the threshold.",
                 ),

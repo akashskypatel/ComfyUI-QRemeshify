@@ -17,6 +17,8 @@ def build_bpy_operation_handlers(
     _write_bmesh_obj,
     _write_sharp_file_from_bmesh,
     _mesh_stats_from_bmesh,
+    _mesh_health_from_bmesh,
+    _cleanup_bmesh_in_place,
     resolve_target_faces,
 ) -> dict[str, callable]:
     """Build the BPY worker operation registry."""
@@ -33,6 +35,14 @@ def build_bpy_operation_handlers(
         try:
             bm = _build_bmesh_from_objects(imported_objects, mesh_path.suffix.lower())
             input_stats = _mesh_stats_from_bmesh(bm)
+            input_health = _mesh_health_from_bmesh(bm)
+            _cleanup_bmesh_in_place(
+                bm,
+                remove_degenerate_faces=bool(payload.get("remove_degenerate_faces")),
+                remove_duplicate_faces=bool(payload.get("remove_duplicate_faces")),
+                remove_unreferenced_vertices=bool(payload.get("remove_unreferenced_vertices")),
+                merge_duplicate_vertices=bool(payload.get("merge_duplicate_vertices")),
+            )
             if payload["symmetry_x"] or payload["symmetry_y"] or payload["symmetry_z"]:
                 _apply_symmetry_preprocess_to_bmesh(
                     bm,
@@ -57,6 +67,7 @@ def build_bpy_operation_handlers(
                 target_faces = 0
                 decimate_reached_target = True
             output_stats = _mesh_stats_from_bmesh(bm)
+            output_health = _mesh_health_from_bmesh(bm)
             _write_bmesh_obj(bm, output_obj_path)
         finally:
             if bm is not None:
@@ -66,6 +77,8 @@ def build_bpy_operation_handlers(
             "output_obj_path": str(output_obj_path),
             "input_stats": input_stats,
             "output_stats": output_stats,
+            "input_health": input_health,
+            "output_health": output_health,
             "decimate_reached_target": bool(decimate_reached_target),
             "decimate_target_resolved": int(target_faces),
         }

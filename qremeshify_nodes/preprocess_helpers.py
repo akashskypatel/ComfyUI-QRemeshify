@@ -16,6 +16,7 @@ from .blender_backend import bpy_available
 from .backend_subprocess import preprocess_mesh_with_backend_subprocess
 from .errors import QRemeshifyError
 from .libigl_compat import require_igl
+from .mesh_health import analyze_mesh_arrays, format_mesh_health_markdown
 from .mesh_io import (
     prepare_mesh_workspace,
     prepare_output_workspace,
@@ -122,19 +123,27 @@ def build_mesh_stats(vertices, faces) -> dict[str, int]:
 
 
 def format_mesh_stats_markdown(
-    input_stats: dict[str, int], output_stats: dict[str, int]
+    input_stats: dict[str, int],
+    output_stats: dict[str, int],
+    input_health: dict[str, int | str] | None = None,
+    output_health: dict[str, int | str] | None = None,
 ) -> str:
     """Format mesh stats as markdown."""
-    return "\n".join(
-        [
-            "## Mesh Stats",
-            "",
-            "| Mesh | Vertices | Faces | Edges | Tris | Quads |",
-            "| --- | ---: | ---: | ---: | ---: | ---: |",
-            f"| Input | {input_stats['vertex_count']} | {input_stats['face_count']} | {input_stats['edge_count']} | {input_stats['tri_count']} | {input_stats['quad_count']} |",
-            f"| Output | {output_stats['vertex_count']} | {output_stats['face_count']} | {output_stats['edge_count']} | {output_stats['tri_count']} | {output_stats['quad_count']} |",
-        ]
-    )
+    sections = [
+        "\n".join(
+            [
+                "## Mesh Stats",
+                "",
+                "| Mesh | Vertices | Faces | Edges | Tris | Quads |",
+                "| --- | ---: | ---: | ---: | ---: | ---: |",
+                f"| Input | {input_stats['vertex_count']} | {input_stats['face_count']} | {input_stats['edge_count']} | {input_stats['tri_count']} | {input_stats['quad_count']} |",
+                f"| Output | {output_stats['vertex_count']} | {output_stats['face_count']} | {output_stats['edge_count']} | {output_stats['tri_count']} | {output_stats['quad_count']} |",
+            ]
+        )
+    ]
+    if input_health is not None and output_health is not None:
+        sections.append(format_mesh_health_markdown(input_health, output_health))
+    return "\n\n".join(sections)
 
 
 def libigl_available() -> bool:
@@ -374,6 +383,7 @@ def resolve_preprocess_backend(
     *,
     symmetry_requested: bool,
     decimate_requested: bool,
+    fill_holes_requested: bool,
     allow_backend_fallback: bool,
 ) -> tuple[str, bool]:
     """Resolve the backend used for preprocessing."""
@@ -383,6 +393,8 @@ def resolve_preprocess_backend(
     if backend == "AUTO":
         if symmetry_requested and bpy_available():
             resolved_backend = "BPY"
+        elif fill_holes_requested:
+            resolved_backend = "TRIMESH"
         elif decimate_requested and bpy_available():
             resolved_backend = "BPY"
         elif decimate_requested and libigl_available():
@@ -434,6 +446,15 @@ def resolve_preprocess_backend(
                 "Decimation requires backend='BPY', backend='LIBIGL', or backend='TRIMESH' unless backend fallback is enabled"
             )
 
+    if fill_holes_requested and resolved_backend != "TRIMESH":
+        if allow_backend_fallback:
+            resolved_backend = "TRIMESH"
+            backend_fallback_used = True
+        else:
+            raise QRemeshifyError(
+                "Hole filling currently requires backend='TRIMESH' unless backend fallback is enabled"
+            )
+
     return resolved_backend, backend_fallback_used
 
 
@@ -448,6 +469,11 @@ def initialize_preprocess_metadata(
     decimate_requested: bool,
     decimate_target_faces: int,
     decimate_ratio: float,
+    remove_degenerate_faces: bool,
+    remove_duplicate_faces: bool,
+    remove_unreferenced_vertices: bool,
+    merge_duplicate_vertices: bool,
+    fill_holes: bool,
     generate_sharp: bool,
 ) -> dict[str, str]:
     """Build the initial preprocessing metadata payload."""
@@ -462,6 +488,11 @@ def initialize_preprocess_metadata(
         "decimate_enabled": str(bool(decimate_requested)).lower(),
         "decimate_target_faces": str(int(decimate_target_faces)),
         "decimate_ratio": f"{float(decimate_ratio):.6f}",
+        "remove_degenerate_faces": str(bool(remove_degenerate_faces)).lower(),
+        "remove_duplicate_faces": str(bool(remove_duplicate_faces)).lower(),
+        "remove_unreferenced_vertices": str(bool(remove_unreferenced_vertices)).lower(),
+        "merge_duplicate_vertices": str(bool(merge_duplicate_vertices)).lower(),
+        "fill_holes": str(bool(fill_holes)).lower(),
         "generate_sharp": str(bool(generate_sharp)).lower(),
     }
 
@@ -499,6 +530,19 @@ def update_preprocess_metadata(
         metadata["libigl_edge_manifold"] = str(bool(edge_manifold)).lower()
     if vertex_manifold is not None:
         metadata["libigl_vertex_manifold"] = str(bool(vertex_manifold)).lower()
+
+
+def update_preprocess_health_metadata(
+    metadata: dict[str, str],
+    *,
+    input_health: dict[str, int | str],
+    output_health: dict[str, int | str],
+) -> None:
+    """Populate mesh health diagnostics into artifact metadata."""
+    for key, value in input_health.items():
+        metadata[f"input_{key}"] = str(value)
+    for key, value in output_health.items():
+        metadata[key] = str(value)
 
 
 def resolve_sharp_backend(
@@ -547,6 +591,11 @@ def run_preprocess_backend_with_fallback(
     decimate_enabled: bool,
     decimate_target_faces: int,
     decimate_ratio: float,
+    remove_degenerate_faces: bool,
+    remove_duplicate_faces: bool,
+    remove_unreferenced_vertices: bool,
+    merge_duplicate_vertices: bool,
+    fill_holes: bool,
 ) -> tuple[dict, str, bool]:
     """Run the preprocess backend and optionally retry on BPY for libigl manifold failures."""
     attempted_fallback = False
@@ -562,6 +611,11 @@ def run_preprocess_backend_with_fallback(
                 decimate_enabled=decimate_enabled,
                 decimate_target_faces=decimate_target_faces,
                 decimate_ratio=decimate_ratio,
+                remove_degenerate_faces=remove_degenerate_faces,
+                remove_duplicate_faces=remove_duplicate_faces,
+                remove_unreferenced_vertices=remove_unreferenced_vertices,
+                merge_duplicate_vertices=merge_duplicate_vertices,
+                fill_holes=fill_holes,
             )
             return result, resolved_backend, backend_fallback_used
         except QRemeshifyError as exc:
@@ -584,7 +638,15 @@ def extract_preprocess_result_state(
     preprocess_result: dict,
     *,
     input_stats: dict[str, int] | None,
-) -> tuple[dict[str, int] | None, bool, int, bool | None, bool | None]:
+) -> tuple[
+    dict[str, int] | None,
+    dict[str, int | str] | None,
+    dict[str, int | str] | None,
+    bool,
+    int,
+    bool | None,
+    bool | None,
+]:
     """Extract stats and backend-state fields returned by the subprocess worker."""
     if input_stats is None:
         result_input_stats = preprocess_result.get("input_stats")
@@ -597,6 +659,12 @@ def extract_preprocess_result_state(
                 "quad_count": int(result_input_stats.get("quad_count", 0)),
             }
 
+    input_health = preprocess_result.get("input_health")
+    if not isinstance(input_health, dict):
+        input_health = None
+    output_health = preprocess_result.get("output_health")
+    if not isinstance(output_health, dict):
+        output_health = None
     decimate_reached_target = bool(
         preprocess_result.get("decimate_reached_target", True)
     )
@@ -611,6 +679,8 @@ def extract_preprocess_result_state(
         vertex_manifold = bool(preprocess_result["vertex_manifold"])
     return (
         input_stats,
+        input_health,
+        output_health,
         decimate_reached_target,
         decimate_target_resolved,
         edge_manifold,
@@ -696,6 +766,8 @@ def build_preprocess_outputs(
     faces,
     input_stats: dict[str, int],
     output_stats: dict[str, int],
+    input_health: dict[str, int | str],
+    output_health: dict[str, int | str],
     sharp_path: str,
     sharp_artifact,
 ) -> tuple[Path, Path, object, str, object | None, str]:
@@ -710,7 +782,12 @@ def build_preprocess_outputs(
         label=stem,
         metadata=metadata,
     )
-    stats_markdown = format_mesh_stats_markdown(input_stats, output_stats)
+    stats_markdown = format_mesh_stats_markdown(
+        input_stats,
+        output_stats,
+        input_health=input_health,
+        output_health=output_health,
+    )
     return (
         output_obj_path,
         workspace_dir,
@@ -732,6 +809,11 @@ def preprocess_mesh_input(
     decimate_enabled=False,
     decimate_target_faces=0,
     decimate_ratio=1.0,
+    remove_degenerate_faces=False,
+    remove_duplicate_faces=False,
+    remove_unreferenced_vertices=False,
+    merge_duplicate_vertices=False,
+    fill_holes=False,
     allow_backend_fallback=False,
     generate_sharp=False,
     sharp_angle=35.0,
@@ -770,6 +852,7 @@ def preprocess_mesh_input(
         backend,
         symmetry_requested=symmetry_requested,
         decimate_requested=decimate_requested,
+        fill_holes_requested=bool(fill_holes),
         allow_backend_fallback=allow_backend_fallback,
     )
 
@@ -783,6 +866,11 @@ def preprocess_mesh_input(
         decimate_requested=decimate_requested,
         decimate_target_faces=decimate_target_faces,
         decimate_ratio=decimate_ratio,
+        remove_degenerate_faces=remove_degenerate_faces,
+        remove_duplicate_faces=remove_duplicate_faces,
+        remove_unreferenced_vertices=remove_unreferenced_vertices,
+        merge_duplicate_vertices=merge_duplicate_vertices,
+        fill_holes=fill_holes,
         generate_sharp=generate_sharp,
     )
     source_mesh, input_stats = materialize_preprocess_source(
@@ -806,12 +894,19 @@ def preprocess_mesh_input(
             decimate_enabled=decimate_enabled,
             decimate_target_faces=decimate_target_faces,
             decimate_ratio=decimate_ratio,
+            remove_degenerate_faces=remove_degenerate_faces,
+            remove_duplicate_faces=remove_duplicate_faces,
+            remove_unreferenced_vertices=remove_unreferenced_vertices,
+            merge_duplicate_vertices=merge_duplicate_vertices,
+            fill_holes=fill_holes,
         )
     )
 
     vertices, faces = parse_obj_payload(str(output_obj_path))
     (
         input_stats,
+        input_health,
+        output_health,
         decimate_reached_target,
         decimate_target_resolved,
         edge_manifold,
@@ -824,6 +919,10 @@ def preprocess_mesh_input(
     output_stats = build_mesh_stats(vertices, faces)
     if input_stats is None:
         input_stats = output_stats
+    if input_health is None:
+        input_health = analyze_mesh_arrays(vertices, faces) if input_kind == "mesh" else {}
+    if output_health is None:
+        output_health = analyze_mesh_arrays(vertices, faces)
     update_preprocess_metadata(
         metadata,
         input_stats=input_stats,
@@ -836,6 +935,12 @@ def preprocess_mesh_input(
         edge_manifold=edge_manifold,
         vertex_manifold=vertex_manifold,
     )
+    if input_health and output_health:
+        update_preprocess_health_metadata(
+            metadata,
+            input_health=input_health,
+            output_health=output_health,
+        )
 
     sharp_path, sharp_artifact = build_sharp_outputs(
         generate_sharp=generate_sharp,
@@ -857,6 +962,8 @@ def preprocess_mesh_input(
         faces=faces,
         input_stats=input_stats,
         output_stats=output_stats,
+        input_health=input_health,
+        output_health=output_health,
         sharp_path=sharp_path,
         sharp_artifact=sharp_artifact,
     )

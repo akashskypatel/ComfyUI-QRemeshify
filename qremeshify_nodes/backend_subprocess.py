@@ -266,6 +266,11 @@ def preprocess_mesh_with_backend_subprocess(
     decimate_enabled: bool = False,
     decimate_target_faces: int = 0,
     decimate_ratio: float = 1.0,
+    remove_degenerate_faces: bool = False,
+    remove_duplicate_faces: bool = False,
+    remove_unreferenced_vertices: bool = False,
+    merge_duplicate_vertices: bool = False,
+    fill_holes: bool = False,
     tolerance: float = 1e-5,
 ) -> dict:
     """Preprocess a mesh with the selected backend in an isolated subprocess."""
@@ -281,6 +286,11 @@ def preprocess_mesh_with_backend_subprocess(
             "decimate_enabled": decimate_enabled,
             "decimate_target_faces": decimate_target_faces,
             "decimate_ratio": decimate_ratio,
+            "remove_degenerate_faces": remove_degenerate_faces,
+            "remove_duplicate_faces": remove_duplicate_faces,
+            "remove_unreferenced_vertices": remove_unreferenced_vertices,
+            "merge_duplicate_vertices": merge_duplicate_vertices,
+            "fill_holes": fill_holes,
             "tolerance": tolerance,
         }
     )
@@ -1043,6 +1053,11 @@ def _mesh_stats_from_bmesh(bm) -> dict[str, int]:
     }
 
 
+def _mesh_health_from_bmesh(bm) -> dict[str, int | str]:
+    """Build mesh health diagnostics from a bmesh."""
+    return _import_repo_module("mesh_health").analyze_bmesh_health(bm)
+
+
 WORKER_DEFAULT_BACKENDS = {
     "probe": "BPY",
     "normalize_mesh_to_obj": "BPY",
@@ -1072,6 +1087,8 @@ def _get_bpy_operation_handlers() -> dict[str, callable]:
         _write_bmesh_obj=_write_bmesh_obj,
         _write_sharp_file_from_bmesh=_write_sharp_file_from_bmesh,
         _mesh_stats_from_bmesh=_mesh_stats_from_bmesh,
+        _mesh_health_from_bmesh=_mesh_health_from_bmesh,
+        _cleanup_bmesh_in_place=_import_repo_module("mesh_cleanup").cleanup_bmesh_in_place,
         resolve_target_faces=resolve_target_faces,
     )
 
@@ -1102,6 +1119,7 @@ def _resolve_worker_handler(payload: dict):
         backend,
         operation,
         QRemeshifyError=QRemeshifyError,
+        _import_repo_module=_import_repo_module,
     )
 
 
