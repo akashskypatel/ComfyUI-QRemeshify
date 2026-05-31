@@ -7,14 +7,14 @@ from pathlib import Path
 
 def bpy_available() -> bool:
     """Check if Blender is available via the isolated subprocess worker."""
-    from .subprocess import bpy_available_via_subprocess
+    from .backend_subprocess import bpy_available_via_subprocess
 
     return bpy_available_via_subprocess()
 
 
 def normalize_mesh_to_obj_with_bpy(mesh_path: Path, output_obj_path: Path) -> Path:
     """Normalize mesh to OBJ using the BPY subprocess worker."""
-    from .subprocess import normalize_mesh_to_obj_with_subprocess
+    from .backend_subprocess import normalize_mesh_to_obj_with_subprocess
 
     return normalize_mesh_to_obj_with_subprocess(mesh_path, output_obj_path)
 
@@ -31,7 +31,7 @@ def preprocess_mesh_with_bpy(
     tolerance: float = 1e-5,
 ) -> Path:
     """Preprocess mesh using the BPY subprocess worker."""
-    from .subprocess import preprocess_mesh_with_subprocess
+    from .backend_subprocess import preprocess_mesh_with_subprocess
 
     return preprocess_mesh_with_subprocess(
         mesh_path,
@@ -55,7 +55,7 @@ def preprocess_obj_with_symmetry_with_bpy(
     tolerance: float = 1e-5,
 ) -> Path:
     """Preprocess OBJ symmetry using the BPY subprocess worker."""
-    from .subprocess import preprocess_obj_with_symmetry_with_subprocess
+    from .backend_subprocess import preprocess_obj_with_symmetry_with_subprocess
 
     return preprocess_obj_with_symmetry_with_subprocess(
         mesh_path,
@@ -74,7 +74,7 @@ def normalize_mesh_and_generate_sharp_with_bpy(
     output_path: Path,
 ) -> Path:
     """Normalize mesh and generate sharp features using the BPY subprocess worker."""
-    from .subprocess import normalize_mesh_and_generate_sharp_with_subprocess
+    from .backend_subprocess import normalize_mesh_and_generate_sharp_with_subprocess
 
     return normalize_mesh_and_generate_sharp_with_subprocess(
         mesh_path,
@@ -93,7 +93,7 @@ def postprocess_obj_with_symmetry_with_bpy(
     tolerance: float = 1e-5,
 ) -> Path:
     """Postprocess OBJ symmetry using the BPY subprocess worker."""
-    from .subprocess import postprocess_obj_with_symmetry_with_subprocess
+    from .backend_subprocess import postprocess_obj_with_symmetry_with_subprocess
 
     return postprocess_obj_with_symmetry_with_subprocess(
         mesh_path,

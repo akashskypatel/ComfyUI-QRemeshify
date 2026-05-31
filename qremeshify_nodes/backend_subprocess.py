@@ -43,7 +43,7 @@ def _import_repo_module(module_name: str):
 
 
 def _run_subprocess(payload: dict) -> dict:
-    """Run bpy operation in a separate Python process.
+    """Run backend operation in a separate Python process.
     
     Args:
         payload: Dictionary containing operation and parameters
@@ -86,17 +86,17 @@ def _run_subprocess(payload: dict) -> dict:
         if isinstance(response, dict):
             error_message = response.get("error")
         if not error_message:
-            error_message = stderr or stdout or "bpy subprocess exited without output"
+            error_message = stderr or stdout or "backend subprocess exited without output"
         raise QRemeshifyError(
-            f"bpy subprocess failed with exit code {completed.returncode}: {error_message}"
+            f"backend subprocess failed with exit code {completed.returncode}: {error_message}"
         )
 
     if not isinstance(response, dict):
         raise QRemeshifyError(
-            f"bpy subprocess returned invalid JSON output: {stdout or '<empty>'}"
+            f"backend subprocess returned invalid JSON output: {stdout or '<empty>'}"
         )
     if response.get("status") != "ok":
-        raise QRemeshifyError(response.get("error", "bpy subprocess returned an error"))
+        raise QRemeshifyError(response.get("error", "backend subprocess returned an error"))
     return response
 
 
@@ -129,7 +129,7 @@ def run_bpy_probe(probe_level: str) -> dict:
 def normalize_mesh_to_obj_with_subprocess(
     mesh_path: Path, output_obj_path: Path
 ) -> Path:
-    """Normalize mesh to OBJ using bpy subprocess.
+    """Normalize mesh to OBJ using backend subprocess.
     
     Args:
         mesh_path: Path to input mesh
@@ -156,7 +156,7 @@ def preprocess_obj_with_symmetry_with_subprocess(
     symmetry_z: bool,
     tolerance: float = 1e-5,
 ) -> Path:
-    """Preprocess OBJ with symmetry using bpy subprocess.
+    """Preprocess OBJ with symmetry using backend subprocess.
     
     Args:
         mesh_path: Path to input mesh
@@ -194,7 +194,7 @@ def preprocess_mesh_with_subprocess(
     decimate_ratio: float = 1.0,
     tolerance: float = 1e-5,
 ) -> Path:
-    """Preprocess mesh using bpy subprocess.
+    """Preprocess mesh using backend subprocess.
     
     Args:
         mesh_path: Path to input mesh
@@ -233,7 +233,7 @@ def normalize_mesh_and_generate_sharp_with_subprocess(
     sharp_angle: float,
     output_path: Path,
 ) -> Path:
-    """Normalize mesh and generate sharp edges using bpy subprocess.
+    """Normalize mesh and generate sharp edges using backend subprocess.
     
     Args:
         mesh_path: Path to input mesh
@@ -387,7 +387,7 @@ def postprocess_obj_with_symmetry_with_subprocess(
     symmetry_z: bool,
     tolerance: float = 1e-5,
 ) -> Path:
-    """Postprocess OBJ with symmetry using bpy subprocess.
+    """Postprocess OBJ with symmetry using backend subprocess.
     
     Args:
         mesh_path: Path to input mesh
@@ -1204,7 +1204,7 @@ def _dispatch_worker(payload: dict) -> dict:
     operation = payload["operation"]
     handler = WORKER_OPERATION_HANDLERS.get(operation)
     if handler is None:
-        raise QRemeshifyError(f"Unsupported bpy subprocess operation: {operation}")
+        raise QRemeshifyError(f"Unsupported backend subprocess operation: {operation}")
     return handler(payload)
 
 

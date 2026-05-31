@@ -13,7 +13,7 @@ from .artifacts import (
     parse_sharp_payload,
 )
 from .blender_backend import bpy_available
-from .subprocess import preprocess_mesh_with_backend_subprocess
+from .backend_subprocess import preprocess_mesh_with_backend_subprocess
 from .errors import QRemeshifyError
 from .libigl_compat import require_igl
 from .mesh_io import (

@@ -2,7 +2,7 @@
 
 from comfy_api.latest import IO
 
-from .subprocess import run_bpy_probe
+from .backend_subprocess import run_bpy_probe
 from .constants import NODE_CATEGORY
 
 
