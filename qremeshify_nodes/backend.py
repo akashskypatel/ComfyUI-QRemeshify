@@ -130,6 +130,130 @@ def default_qr_parameters() -> QRParameters:
     return params
 
 
+def resolve_backend_library_paths() -> tuple[Path, Path]:
+    """Resolve platform-specific QuadWild and QuadPatches library paths."""
+    if not BACKEND_DIR.exists():
+        raise QRemeshifyError(f"Backend directory not found: {BACKEND_DIR}")
+    if not CONFIG_DIR.exists():
+        raise QRemeshifyError(f"Config directory not found: {CONFIG_DIR}")
+
+    system = platform.system()
+    if system == "Windows":
+        quadwild_name = "lib_quadwild.dll"
+        quadpatches_name = "lib_quadpatches.dll"
+    elif system == "Darwin":
+        quadwild_name = "liblib_quadwild.dylib"
+        quadpatches_name = "liblib_quadpatches.dylib"
+    else:
+        quadwild_name = "liblib_quadwild.so"
+        quadpatches_name = "liblib_quadpatches.so"
+
+    quadwild_path = BACKEND_DIR / quadwild_name
+    quadpatches_path = BACKEND_DIR / quadpatches_name
+    if not quadwild_path.exists():
+        raise QRemeshifyError(f"QuadWild library not found: {quadwild_path}")
+    if not quadpatches_path.exists():
+        raise QRemeshifyError(f"QuadPatches library not found: {quadpatches_path}")
+    return quadwild_path, quadpatches_path
+
+
+def load_backend_libraries():
+    """Load native QuadWild libraries and configure ctypes signatures."""
+    quadwild_path, quadpatches_path = resolve_backend_library_paths()
+    quadwild = cdll.LoadLibrary(str(quadwild_path))
+    quadpatches = cdll.LoadLibrary(str(quadpatches_path))
+
+    quadwild.remeshAndField2.argtypes = [
+        POINTER(Parameters),
+        c_char_p,
+        c_char_p,
+        c_char_p,
+    ]
+    quadwild.remeshAndField2.restype = None
+    quadwild.trace2.argtypes = [c_char_p]
+    quadwild.trace2.restype = c_bool
+    quadpatches.quadPatches.argtypes = [
+        c_char_p,
+        POINTER(QRParameters),
+        c_float,
+        c_int,
+        c_bool,
+    ]
+    quadpatches.quadPatches.restype = c_int
+    return quadwild, quadpatches
+
+
+def derive_backend_output_paths(mesh_path: Path) -> dict[str, Path]:
+    """Derive all output/intermediate paths produced by the native backend."""
+    mesh_prefix = str(mesh_path.with_suffix(""))
+    return {
+        "sharp_path": Path(f"{mesh_prefix}_rem.sharp"),
+        "field_path": Path(f"{mesh_prefix}_rem.rosy"),
+        "remeshed_path": Path(f"{mesh_prefix}_rem.obj"),
+        "traced_path": Path(f"{mesh_prefix}_rem_p0.obj"),
+        "output_path": Path(f"{mesh_prefix}_rem_p0_0_quadrangulation.obj"),
+        "output_smoothed_path": Path(
+            f"{mesh_prefix}_rem_p0_0_quadrangulation_smooth.obj"
+        ),
+    }
+
+
+def build_quadrangulate_params(
+    *,
+    alpha: float,
+    ilp_method: str,
+    time_limit: int,
+    gap_limit: float,
+    minimum_gap: float,
+    isometry: bool,
+    regularity_quadrilaterals: bool,
+    regularity_non_quadrilaterals: bool,
+    regularity_non_quadrilaterals_weight: float,
+    align_singularities: bool,
+    align_singularities_weight: float,
+    repeat_losing_constraints_iterations: bool,
+    repeat_losing_constraints_quads: bool,
+    repeat_losing_constraints_non_quads: bool,
+    repeat_losing_constraints_align: bool,
+    hard_parity_constraint: bool,
+    flow_config: str,
+    satsuma_config: str,
+    callback_time_limit: list[float],
+    callback_gap_limit: list[float],
+) -> QRParameters:
+    """Build configured QRParameters for quadrangulation."""
+    params = default_qr_parameters()
+    params.alpha = alpha
+    params.ilpMethod = ILP_METHODS[ilp_method]
+    params.timeLimit = time_limit
+    params.gapLimit = gap_limit
+    params.minimumGap = minimum_gap
+    params.isometry = isometry
+    params.regularityQuadrilaterals = regularity_quadrilaterals
+    params.regularityNonQuadrilaterals = regularity_non_quadrilaterals
+    params.regularityNonQuadrilateralsWeight = regularity_non_quadrilaterals_weight
+    params.alignSingularities = align_singularities
+    params.alignSingularitiesWeight = align_singularities_weight
+    params.repeatLosingConstraintsIterations = repeat_losing_constraints_iterations
+    params.repeatLosingConstraintsQuads = repeat_losing_constraints_quads
+    params.repeatLosingConstraintsNonQuads = repeat_losing_constraints_non_quads
+    params.repeatLosingConstraintsAlign = repeat_losing_constraints_align
+    params.hardParityConstraint = hard_parity_constraint
+    params.flow_config_filename = str(
+        CONFIG_DIR / FLOW_CONFIG_FILES[flow_config]
+    ).encode("utf-8")
+    params.satsuma_config_filename = str(
+        CONFIG_DIR / SATSUMA_CONFIG_FILES[satsuma_config]
+    ).encode("utf-8")
+    params.callbackTimeLimit = (c_float * len(callback_time_limit))(
+        *callback_time_limit
+    )
+    params.callbackGapLimit = (c_float * len(callback_gap_limit))(
+        *callback_gap_limit
+    )
+    return params
+
+
 class QuadwildBackend:
     """Quadwild backend for mesh processing."""
     
@@ -141,60 +265,16 @@ class QuadwildBackend:
         """
         if not mesh_path:
             raise QRemeshifyError("mesh_path is empty")
-        if not BACKEND_DIR.exists():
-            raise QRemeshifyError(f"Backend directory not found: {BACKEND_DIR}")
-        if not CONFIG_DIR.exists():
-            raise QRemeshifyError(f"Config directory not found: {CONFIG_DIR}")
-
-        system = platform.system()
-        if system == "Windows":
-            quadwild_name = "lib_quadwild.dll"
-            quadpatches_name = "lib_quadpatches.dll"
-        elif system == "Darwin":
-            quadwild_name = "liblib_quadwild.dylib"
-            quadpatches_name = "liblib_quadpatches.dylib"
-        else:
-            quadwild_name = "liblib_quadwild.so"
-            quadpatches_name = "liblib_quadpatches.so"
-
-        quadwild_path = BACKEND_DIR / quadwild_name
-        quadpatches_path = BACKEND_DIR / quadpatches_name
-        if not quadwild_path.exists():
-            raise QRemeshifyError(f"QuadWild library not found: {quadwild_path}")
-        if not quadpatches_path.exists():
-            raise QRemeshifyError(f"QuadPatches library not found: {quadpatches_path}")
-
-        self.quadwild = cdll.LoadLibrary(str(quadwild_path))
-        self.quadpatches = cdll.LoadLibrary(str(quadpatches_path))
-
-        self.quadwild.remeshAndField2.argtypes = [
-            POINTER(Parameters),
-            c_char_p,
-            c_char_p,
-            c_char_p,
-        ]
-        self.quadwild.remeshAndField2.restype = None
-        self.quadwild.trace2.argtypes = [c_char_p]
-        self.quadwild.trace2.restype = c_bool
-        self.quadpatches.quadPatches.argtypes = [
-            c_char_p,
-            POINTER(QRParameters),
-            c_float,
-            c_int,
-            c_bool,
-        ]
-        self.quadpatches.quadPatches.restype = c_int
+        self.quadwild, self.quadpatches = load_backend_libraries()
 
         self.mesh_path = mesh_path
-        mesh_prefix = str(mesh_path.with_suffix(""))
-        self.sharp_path = Path(f"{mesh_prefix}_rem.sharp")
-        self.field_path = Path(f"{mesh_prefix}_rem.rosy")
-        self.remeshed_path = Path(f"{mesh_prefix}_rem.obj")
-        self.traced_path = Path(f"{mesh_prefix}_rem_p0.obj")
-        self.output_path = Path(f"{mesh_prefix}_rem_p0_0_quadrangulation.obj")
-        self.output_smoothed_path = Path(
-            f"{mesh_prefix}_rem_p0_0_quadrangulation_smooth.obj"
-        )
+        output_paths = derive_backend_output_paths(mesh_path)
+        self.sharp_path = output_paths["sharp_path"]
+        self.field_path = output_paths["field_path"]
+        self.remeshed_path = output_paths["remeshed_path"]
+        self.traced_path = output_paths["traced_path"]
+        self.output_path = output_paths["output_path"]
+        self.output_smoothed_path = output_paths["output_smoothed_path"]
 
     def remesh_and_field(
         self, remesh: bool, sharp_features_path: str, sharp_angle: float
@@ -298,34 +378,27 @@ class QuadwildBackend:
             callback_time_limit: Callback time limit
             callback_gap_limit: Callback gap limit
         """
-        params = default_qr_parameters()
-        params.alpha = alpha
-        params.ilpMethod = ILP_METHODS[ilp_method]
-        params.timeLimit = time_limit
-        params.gapLimit = gap_limit
-        params.minimumGap = minimum_gap
-        params.isometry = isometry
-        params.regularityQuadrilaterals = regularity_quadrilaterals
-        params.regularityNonQuadrilaterals = regularity_non_quadrilaterals
-        params.regularityNonQuadrilateralsWeight = regularity_non_quadrilaterals_weight
-        params.alignSingularities = align_singularities
-        params.alignSingularitiesWeight = align_singularities_weight
-        params.repeatLosingConstraintsIterations = repeat_losing_constraints_iterations
-        params.repeatLosingConstraintsQuads = repeat_losing_constraints_quads
-        params.repeatLosingConstraintsNonQuads = repeat_losing_constraints_non_quads
-        params.repeatLosingConstraintsAlign = repeat_losing_constraints_align
-        params.hardParityConstraint = hard_parity_constraint
-        params.flow_config_filename = str(
-            CONFIG_DIR / FLOW_CONFIG_FILES[flow_config]
-        ).encode("utf-8")
-        params.satsuma_config_filename = str(
-            CONFIG_DIR / SATSUMA_CONFIG_FILES[satsuma_config]
-        ).encode("utf-8")
-        params.callbackTimeLimit = (c_float * len(callback_time_limit))(
-            *callback_time_limit
-        )
-        params.callbackGapLimit = (c_float * len(callback_gap_limit))(
-            *callback_gap_limit
+        params = build_quadrangulate_params(
+            alpha=alpha,
+            ilp_method=ilp_method,
+            time_limit=time_limit,
+            gap_limit=gap_limit,
+            minimum_gap=minimum_gap,
+            isometry=isometry,
+            regularity_quadrilaterals=regularity_quadrilaterals,
+            regularity_non_quadrilaterals=regularity_non_quadrilaterals,
+            regularity_non_quadrilaterals_weight=regularity_non_quadrilaterals_weight,
+            align_singularities=align_singularities,
+            align_singularities_weight=align_singularities_weight,
+            repeat_losing_constraints_iterations=repeat_losing_constraints_iterations,
+            repeat_losing_constraints_quads=repeat_losing_constraints_quads,
+            repeat_losing_constraints_non_quads=repeat_losing_constraints_non_quads,
+            repeat_losing_constraints_align=repeat_losing_constraints_align,
+            hard_parity_constraint=hard_parity_constraint,
+            flow_config=flow_config,
+            satsuma_config=satsuma_config,
+            callback_time_limit=callback_time_limit,
+            callback_gap_limit=callback_gap_limit,
         )
 
         try:
