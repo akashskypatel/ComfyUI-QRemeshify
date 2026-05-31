@@ -88,25 +88,36 @@ def extract_mesh_arrays(mesh_value):
 
 
 def count_unique_edges(faces: np.ndarray | list[list[int]]) -> int:
-    """Count unique undirected edges from triangle faces."""
+    """Count unique undirected edges from polygon faces."""
     if len(faces) == 0:
         return 0
-    face_array = np.asarray(faces, dtype=np.int64)
     edges: set[tuple[int, int]] = set()
-    for face in face_array:
-        a, b, c = int(face[0]), int(face[1]), int(face[2])
-        edges.add(tuple(sorted((a, b))))
-        edges.add(tuple(sorted((b, c))))
-        edges.add(tuple(sorted((c, a))))
+    for face in faces:
+        face_vertices = [int(vertex) for vertex in face]
+        if len(face_vertices) < 2:
+            continue
+        for index, start in enumerate(face_vertices):
+            end = face_vertices[(index + 1) % len(face_vertices)]
+            edges.add(tuple(sorted((start, end))))
     return len(edges)
 
 
 def build_mesh_stats(vertices, faces) -> dict[str, int]:
-    """Build basic mesh stats for vertices, faces, and edges."""
+    """Build basic mesh stats for vertices, faces, edges, tris, and quads."""
+    tri_count = 0
+    quad_count = 0
+    for face in faces:
+        face_size = len(face)
+        if face_size == 3:
+            tri_count += 1
+        elif face_size == 4:
+            quad_count += 1
     return {
         "vertex_count": int(len(vertices)),
         "face_count": int(len(faces)),
         "edge_count": int(count_unique_edges(faces)),
+        "tri_count": int(tri_count),
+        "quad_count": int(quad_count),
     }
 
 
@@ -118,10 +129,10 @@ def format_mesh_stats_markdown(
         [
             "## Mesh Stats",
             "",
-            "| Mesh | Vertices | Faces | Edges |",
-            "| --- | ---: | ---: | ---: |",
-            f"| Input | {input_stats['vertex_count']} | {input_stats['face_count']} | {input_stats['edge_count']} |",
-            f"| Output | {output_stats['vertex_count']} | {output_stats['face_count']} | {output_stats['edge_count']} |",
+            "| Mesh | Vertices | Faces | Edges | Tris | Quads |",
+            "| --- | ---: | ---: | ---: | ---: | ---: |",
+            f"| Input | {input_stats['vertex_count']} | {input_stats['face_count']} | {input_stats['edge_count']} | {input_stats['tri_count']} | {input_stats['quad_count']} |",
+            f"| Output | {output_stats['vertex_count']} | {output_stats['face_count']} | {output_stats['edge_count']} | {output_stats['tri_count']} | {output_stats['quad_count']} |",
         ]
     )
 
@@ -472,9 +483,13 @@ def update_preprocess_metadata(
     metadata["face_count"] = str(output_stats["face_count"])
     metadata["vertex_count"] = str(output_stats["vertex_count"])
     metadata["edge_count"] = str(output_stats["edge_count"])
+    metadata["tri_count"] = str(output_stats["tri_count"])
+    metadata["quad_count"] = str(output_stats["quad_count"])
     metadata["input_face_count"] = str(input_stats["face_count"])
     metadata["input_vertex_count"] = str(input_stats["vertex_count"])
     metadata["input_edge_count"] = str(input_stats["edge_count"])
+    metadata["input_tri_count"] = str(input_stats["tri_count"])
+    metadata["input_quad_count"] = str(input_stats["quad_count"])
     metadata["resolved_backend"] = resolved_backend
     metadata["backend_fallback_used"] = str(bool(backend_fallback_used)).lower()
     metadata["decimate_backend"] = resolved_backend if decimate_requested else "NONE"
@@ -578,6 +593,8 @@ def extract_preprocess_result_state(
                 "vertex_count": int(result_input_stats["vertex_count"]),
                 "face_count": int(result_input_stats["face_count"]),
                 "edge_count": int(result_input_stats["edge_count"]),
+                "tri_count": int(result_input_stats.get("tri_count", result_input_stats["face_count"])),
+                "quad_count": int(result_input_stats.get("quad_count", 0)),
             }
 
     decimate_reached_target = bool(

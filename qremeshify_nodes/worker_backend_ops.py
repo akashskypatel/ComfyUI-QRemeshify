@@ -22,11 +22,13 @@ def _count_unique_edges_from_faces(faces) -> int:
 
 
 def mesh_stats_from_arrays(vertices, faces) -> dict[str, int]:
-    """Build vertex/face/edge stats from mesh arrays."""
+    """Build vertex/face/edge/tri/quad stats from triangle mesh arrays."""
     return {
         "vertex_count": int(len(vertices)),
         "face_count": int(len(faces)),
         "edge_count": int(_count_unique_edges_from_faces(faces)),
+        "tri_count": int(len(faces)),
+        "quad_count": 0,
     }
 
 

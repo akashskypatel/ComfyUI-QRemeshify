@@ -850,32 +850,38 @@ def _decimation_ratio(current_faces: int, target_faces: int, ratio: float) -> fl
     return max(0.0, min(1.0, resolved_ratio))
 
 
-def _decimate_bmesh(bm, target_faces: int, ratio: float):
-    """Decimate bmesh.
-    
-    Args:
-        bm: bmesh to decimate
-        target_faces: Target number of faces
-        ratio: Decimation ratio
-        
-    Returns:
-        Decimated bmesh
-    """
+def _apply_decimate_modifier_once(bm, ratio: float):
+    """Apply one Blender decimate-modifier pass and return a new bmesh."""
     bpy, bmesh, _ = _require_bpy()
-    current_faces = len(bm.faces)
-    resolved_ratio = _decimation_ratio(current_faces, target_faces, ratio)
-    if resolved_ratio >= 0.999999:
-        return bm
-
     temp_mesh = bpy.data.meshes.new(name="QRemeshifyDecimateMesh")
     temp_obj = bpy.data.objects.new("QRemeshifyDecimateObject", temp_mesh)
     bpy.context.scene.collection.objects.link(temp_obj)
     decimated_bm = None
     try:
         bm.to_mesh(temp_mesh)
+        pre_decimate_bm = bmesh.new()
+        try:
+            pre_decimate_bm.from_mesh(temp_mesh)
+            triangle_faces = [face for face in pre_decimate_bm.faces if len(face.verts) == 3]
+            if triangle_faces:
+                bmesh.ops.join_triangles(
+                    pre_decimate_bm,
+                    faces=triangle_faces,
+                    cmp_seam=False,
+                    cmp_sharp=False,
+                    cmp_uvs=False,
+                    cmp_vcols=False,
+                    cmp_materials=True,
+                    angle_face_threshold=3.141592653589793,
+                    angle_shape_threshold=3.141592653589793,
+                )
+                pre_decimate_bm.to_mesh(temp_mesh)
+                temp_mesh.update()
+        finally:
+            pre_decimate_bm.free()
         modifier = temp_obj.modifiers.new(name="QRemeshifyDecimate", type="DECIMATE")
         modifier.decimate_type = "COLLAPSE"
-        modifier.ratio = resolved_ratio
+        modifier.ratio = float(ratio)
         if hasattr(modifier, "use_collapse_triangulate"):
             modifier.use_collapse_triangulate = True
 
@@ -900,8 +906,66 @@ def _decimate_bmesh(bm, target_faces: int, ratio: float):
     decimated_bm.faces.ensure_lookup_table()
     decimated_bm.edges.ensure_lookup_table()
     decimated_bm.verts.ensure_lookup_table()
-    bm.free()
     return decimated_bm
+
+
+def _triangulate_bmesh_in_place(bm) -> None:
+    """Triangulate a bmesh in place so face counts match final exported topology."""
+    bpy, bmesh, _ = _require_bpy()
+    bmesh.ops.triangulate(
+        bm,
+        faces=bm.faces,
+        quad_method="SHORT_EDGE",
+        ngon_method="BEAUTY",
+    )
+    bm.faces.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    bm.verts.ensure_lookup_table()
+
+
+def _decimate_bmesh(bm, target_faces: int, ratio: float):
+    """Decimate bmesh.
+    
+    Args:
+        bm: bmesh to decimate
+        target_faces: Target number of faces
+        ratio: Decimation ratio
+        
+    Returns:
+        Decimated bmesh
+    """
+    _triangulate_bmesh_in_place(bm)
+    current_faces = len(bm.faces)
+    resolved_ratio = _decimation_ratio(current_faces, target_faces, ratio)
+    if resolved_ratio >= 0.999999:
+        return bm
+    target_faces = int(target_faces)
+    working_bm = bm
+    working_faces = current_faces
+    max_passes = 8 if target_faces > 0 else 1
+
+    for _ in range(max_passes):
+        pass_ratio = _decimation_ratio(working_faces, target_faces, ratio)
+        if pass_ratio >= 0.999999:
+            break
+
+        decimated_bm = _apply_decimate_modifier_once(working_bm, pass_ratio)
+        decimated_faces = len(decimated_bm.faces)
+        previous_bm = working_bm
+        working_bm = decimated_bm
+        working_faces = decimated_faces
+        previous_bm.free()
+
+        if target_faces > 0 and decimated_faces <= target_faces:
+            break
+
+        # Stop if the modifier is no longer making meaningful progress.
+        if decimated_faces >= current_faces or abs(current_faces - decimated_faces) < 8:
+            break
+
+        current_faces = decimated_faces
+
+    return working_bm
 
 
 def _run_probe(probe_level: str) -> dict:
@@ -961,11 +1025,21 @@ def _run_probe(probe_level: str) -> dict:
 
 
 def _mesh_stats_from_bmesh(bm) -> dict[str, int]:
-    """Build vertex/face/edge stats from a bmesh."""
+    """Build vertex/face/edge/tri/quad stats from a bmesh."""
+    tri_count = 0
+    quad_count = 0
+    for face in bm.faces:
+        face_size = len(face.verts)
+        if face_size == 3:
+            tri_count += 1
+        elif face_size == 4:
+            quad_count += 1
     return {
         "vertex_count": int(len(bm.verts)),
         "face_count": int(len(bm.faces)),
         "edge_count": int(len(bm.edges)),
+        "tri_count": int(tri_count),
+        "quad_count": int(quad_count),
     }
 
 
