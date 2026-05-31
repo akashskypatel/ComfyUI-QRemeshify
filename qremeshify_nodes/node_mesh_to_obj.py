@@ -32,8 +32,8 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
                 ),
                 IO.Combo.Input(
                     "backend",
-                    options=["AUTO", "BPY", "LIBIGL", "TRIMESH"],
-                    default="AUTO",
+                    options=["BPY"], # disable other backends for now ["AUTO", "BPY", "LIBIGL", "TRIMESH"],
+                    default="BPY", # "AUTO",
                     tooltip="Backend to use for mesh processing",
                 ),
                 IO.Boolean.Input("allow_backend_fallback", default=False, tooltip="Allow backend fallback"),
@@ -51,7 +51,7 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
     def execute(
         cls,
         input_mesh,
-        backend="AUTO",
+        backend="BPY", # "AUTO",
         allow_backend_fallback=False,
         output_dir="",
         output_prefix="",
