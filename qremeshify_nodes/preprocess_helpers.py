@@ -519,6 +519,191 @@ def resolve_sharp_backend(
     return resolved_sharp_backend
 
 
+def run_preprocess_backend_with_fallback(
+    *,
+    source_mesh: Path,
+    output_obj_path: Path,
+    resolved_backend: str,
+    backend_fallback_used: bool,
+    allow_backend_fallback: bool,
+    symmetry_x: bool,
+    symmetry_y: bool,
+    symmetry_z: bool,
+    decimate_enabled: bool,
+    decimate_target_faces: int,
+    decimate_ratio: float,
+) -> tuple[dict, str, bool]:
+    """Run the preprocess backend and optionally retry on BPY for libigl manifold failures."""
+    attempted_fallback = False
+    while True:
+        try:
+            result = preprocess_mesh_with_backend_subprocess(
+                source_mesh,
+                output_obj_path,
+                resolved_backend,
+                symmetry_x=symmetry_x,
+                symmetry_y=symmetry_y,
+                symmetry_z=symmetry_z,
+                decimate_enabled=decimate_enabled,
+                decimate_target_faces=decimate_target_faces,
+                decimate_ratio=decimate_ratio,
+            )
+            return result, resolved_backend, backend_fallback_used
+        except QRemeshifyError as exc:
+            message = str(exc)
+            if (
+                resolved_backend == "LIBIGL"
+                and allow_backend_fallback
+                and not attempted_fallback
+                and "requires a manifold triangle mesh" in message
+                and bpy_available()
+            ):
+                resolved_backend = "BPY"
+                backend_fallback_used = True
+                attempted_fallback = True
+                continue
+            raise
+
+
+def extract_preprocess_result_state(
+    preprocess_result: dict,
+    *,
+    input_stats: dict[str, int] | None,
+) -> tuple[dict[str, int] | None, bool, int, bool | None, bool | None]:
+    """Extract stats and backend-state fields returned by the subprocess worker."""
+    if input_stats is None:
+        result_input_stats = preprocess_result.get("input_stats")
+        if isinstance(result_input_stats, dict):
+            input_stats = {
+                "vertex_count": int(result_input_stats["vertex_count"]),
+                "face_count": int(result_input_stats["face_count"]),
+                "edge_count": int(result_input_stats["edge_count"]),
+            }
+
+    decimate_reached_target = bool(
+        preprocess_result.get("decimate_reached_target", True)
+    )
+    decimate_target_resolved = int(
+        preprocess_result.get("decimate_target_resolved", 0)
+    )
+    edge_manifold = None
+    vertex_manifold = None
+    if "edge_manifold" in preprocess_result:
+        edge_manifold = bool(preprocess_result["edge_manifold"])
+    if "vertex_manifold" in preprocess_result:
+        vertex_manifold = bool(preprocess_result["vertex_manifold"])
+    return (
+        input_stats,
+        decimate_reached_target,
+        decimate_target_resolved,
+        edge_manifold,
+        vertex_manifold,
+    )
+
+
+def build_sharp_outputs(
+    *,
+    generate_sharp: bool,
+    sharp_backend: str,
+    allow_backend_fallback: bool,
+    workspace_dir: Path,
+    stem: str,
+    output_obj_path: Path,
+    sharp_angle: float,
+) -> tuple[str, object | None]:
+    """Generate sharp features and build the returned sharp artifact."""
+    sharp_path = ""
+    sharp_artifact = None
+    if not generate_sharp:
+        return sharp_path, sharp_artifact
+
+    resolved_sharp_backend = resolve_sharp_backend(
+        sharp_backend,
+        allow_backend_fallback=allow_backend_fallback,
+    )
+    sharp_output_path = workspace_dir / f"{stem}.sharp"
+    sharp_path = str(
+        generate_sharp_features(
+            output_obj_path,
+            output_obj_path,
+            sharp_angle,
+            sharp_output_path,
+            resolved_sharp_backend,
+        )
+    )
+    feature_rows = parse_sharp_payload(sharp_path)
+    sharp_artifact = build_sharp_artifact(
+        sharp_features_path=sharp_path,
+        feature_rows=feature_rows,
+        mesh_obj_path=str(output_obj_path),
+        workspace_dir=str(workspace_dir),
+        backend=resolved_sharp_backend,
+        label=stem,
+        metadata={
+            "sharp_angle": f"{float(sharp_angle):.4f}",
+            "source_backend": resolved_sharp_backend,
+        },
+    )
+    return sharp_path, sharp_artifact
+
+
+def materialize_preprocess_source(
+    *,
+    input_kind: str,
+    input_mesh,
+    workspace_dir: Path,
+    stem: str,
+    source_mesh: Path | None,
+) -> tuple[Path, dict[str, int] | None]:
+    """Materialize a concrete source mesh path for preprocessing."""
+    input_stats: dict[str, int] | None = None
+    if input_kind == "mesh":
+        vertices, faces = extract_mesh_arrays(input_mesh)
+        input_stats = build_mesh_stats(vertices, faces)
+        source_mesh = workspace_dir / f"{stem}_source.obj"
+        write_triangle_obj(source_mesh, vertices, faces)
+    if source_mesh is None:
+        raise QRemeshifyError("Preprocess source mesh path could not be resolved")
+    return source_mesh, input_stats
+
+
+def build_preprocess_outputs(
+    *,
+    output_obj_path: Path,
+    workspace_dir: Path,
+    source_mesh: Path,
+    resolved_backend: str,
+    stem: str,
+    metadata: dict[str, str],
+    vertices,
+    faces,
+    input_stats: dict[str, int],
+    output_stats: dict[str, int],
+    sharp_path: str,
+    sharp_artifact,
+) -> tuple[Path, Path, object, str, object | None, str]:
+    """Build final preprocess outputs and markdown summary."""
+    mesh_artifact = build_mesh_artifact(
+        obj_path=str(output_obj_path),
+        vertices=vertices,
+        faces=faces,
+        workspace_dir=str(workspace_dir),
+        source_path=str(source_mesh),
+        backend=resolved_backend,
+        label=stem,
+        metadata=metadata,
+    )
+    stats_markdown = format_mesh_stats_markdown(input_stats, output_stats)
+    return (
+        output_obj_path,
+        workspace_dir,
+        mesh_artifact,
+        sharp_path,
+        sharp_artifact,
+        stats_markdown,
+    )
+
+
 def preprocess_mesh_input(
     input_mesh,
     backend="AUTO",
@@ -575,7 +760,6 @@ def preprocess_mesh_input(
         allow_backend_fallback=allow_backend_fallback,
     )
 
-    input_stats: dict[str, int] | None = None
     metadata = initialize_preprocess_metadata(
         input_kind=input_kind,
         backend=backend,
@@ -588,67 +772,41 @@ def preprocess_mesh_input(
         decimate_ratio=decimate_ratio,
         generate_sharp=generate_sharp,
     )
-    decimate_reached_target = True
-    decimate_target_resolved = 0
-    edge_manifold = None
-    vertex_manifold = None
+    source_mesh, input_stats = materialize_preprocess_source(
+        input_kind=input_kind,
+        input_mesh=input_mesh,
+        workspace_dir=workspace_dir,
+        stem=stem,
+        source_mesh=source_mesh,
+    )
 
-    if input_kind == "mesh":
-        vertices, faces = extract_mesh_arrays(input_mesh)
-        input_stats = build_mesh_stats(vertices, faces)
-        source_mesh = workspace_dir / f"{stem}_source.obj"
-        write_triangle_obj(source_mesh, vertices, faces)
-
-    preprocess_result = None
-    attempted_fallback = False
-    while True:
-        try:
-            preprocess_result = preprocess_mesh_with_backend_subprocess(
-                source_mesh,
-                output_obj_path,
-                resolved_backend,
-                symmetry_x=symmetry_x,
-                symmetry_y=symmetry_y,
-                symmetry_z=symmetry_z,
-                decimate_enabled=decimate_enabled,
-                decimate_target_faces=decimate_target_faces,
-                decimate_ratio=decimate_ratio,
-            )
-            break
-        except QRemeshifyError as exc:
-            message = str(exc)
-            if (
-                resolved_backend == "LIBIGL"
-                and allow_backend_fallback
-                and not attempted_fallback
-                and "requires a manifold triangle mesh" in message
-                and bpy_available()
-            ):
-                resolved_backend = "BPY"
-                backend_fallback_used = True
-                attempted_fallback = True
-                continue
-            raise
+    preprocess_result, resolved_backend, backend_fallback_used = (
+        run_preprocess_backend_with_fallback(
+            source_mesh=source_mesh,
+            output_obj_path=output_obj_path,
+            resolved_backend=resolved_backend,
+            backend_fallback_used=backend_fallback_used,
+            allow_backend_fallback=allow_backend_fallback,
+            symmetry_x=symmetry_x,
+            symmetry_y=symmetry_y,
+            symmetry_z=symmetry_z,
+            decimate_enabled=decimate_enabled,
+            decimate_target_faces=decimate_target_faces,
+            decimate_ratio=decimate_ratio,
+        )
+    )
 
     vertices, faces = parse_obj_payload(str(output_obj_path))
-    if input_stats is None:
-        result_input_stats = preprocess_result.get("input_stats")
-        if isinstance(result_input_stats, dict):
-            input_stats = {
-                "vertex_count": int(result_input_stats["vertex_count"]),
-                "face_count": int(result_input_stats["face_count"]),
-                "edge_count": int(result_input_stats["edge_count"]),
-            }
-    decimate_reached_target = bool(
-        preprocess_result.get("decimate_reached_target", True)
+    (
+        input_stats,
+        decimate_reached_target,
+        decimate_target_resolved,
+        edge_manifold,
+        vertex_manifold,
+    ) = extract_preprocess_result_state(
+        preprocess_result,
+        input_stats=input_stats,
     )
-    decimate_target_resolved = int(
-        preprocess_result.get("decimate_target_resolved", 0)
-    )
-    if "edge_manifold" in preprocess_result:
-        edge_manifold = bool(preprocess_result["edge_manifold"])
-    if "vertex_manifold" in preprocess_result:
-        vertex_manifold = bool(preprocess_result["vertex_manifold"])
 
     output_stats = build_mesh_stats(vertices, faces)
     if input_stats is None:
@@ -666,53 +824,26 @@ def preprocess_mesh_input(
         vertex_manifold=vertex_manifold,
     )
 
-    mesh_artifact = build_mesh_artifact(
-        obj_path=str(output_obj_path),
+    sharp_path, sharp_artifact = build_sharp_outputs(
+        generate_sharp=generate_sharp,
+        sharp_backend=sharp_backend,
+        allow_backend_fallback=allow_backend_fallback,
+        workspace_dir=workspace_dir,
+        stem=stem,
+        output_obj_path=output_obj_path,
+        sharp_angle=sharp_angle,
+    )
+    return build_preprocess_outputs(
+        output_obj_path=output_obj_path,
+        workspace_dir=workspace_dir,
+        source_mesh=source_mesh,
+        resolved_backend=resolved_backend,
+        stem=stem,
+        metadata=metadata,
         vertices=vertices,
         faces=faces,
-        workspace_dir=str(workspace_dir),
-        source_path=str(source_mesh) if source_mesh is not None else "",
-        backend=resolved_backend,
-        label=stem,
-        metadata=metadata,
-    )
-
-    sharp_path = ""
-    sharp_artifact = None
-    if generate_sharp:
-        resolved_sharp_backend = resolve_sharp_backend(
-            sharp_backend,
-            allow_backend_fallback=allow_backend_fallback,
-        )
-        sharp_output_path = workspace_dir / f"{stem}.sharp"
-        sharp_path = str(
-            generate_sharp_features(
-                output_obj_path,
-                output_obj_path,
-                sharp_angle,
-                sharp_output_path,
-                resolved_sharp_backend,
-            )
-        )
-        feature_rows = parse_sharp_payload(sharp_path)
-        sharp_artifact = build_sharp_artifact(
-            sharp_features_path=sharp_path,
-            feature_rows=feature_rows,
-            mesh_obj_path=str(output_obj_path),
-            workspace_dir=str(workspace_dir),
-            backend=resolved_sharp_backend,
-            label=stem,
-            metadata={
-                "sharp_angle": f"{float(sharp_angle):.4f}",
-                "source_backend": resolved_sharp_backend,
-            },
-        )
-    stats_markdown = format_mesh_stats_markdown(input_stats, output_stats)
-    return (
-        output_obj_path,
-        workspace_dir,
-        mesh_artifact,
-        sharp_path,
-        sharp_artifact,
-        stats_markdown,
+        input_stats=input_stats,
+        output_stats=output_stats,
+        sharp_path=sharp_path,
+        sharp_artifact=sharp_artifact,
     )
