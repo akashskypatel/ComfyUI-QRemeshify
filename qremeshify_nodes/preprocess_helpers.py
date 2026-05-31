@@ -358,6 +358,167 @@ def coerce_mesh_input(input_mesh, output_dir: str, output_prefix: str):
     )
 
 
+def resolve_preprocess_backend(
+    backend: str,
+    *,
+    symmetry_requested: bool,
+    decimate_requested: bool,
+    allow_backend_fallback: bool,
+) -> tuple[str, bool]:
+    """Resolve the backend used for preprocessing."""
+    resolved_backend = backend
+    backend_fallback_used = False
+
+    if backend == "AUTO":
+        if symmetry_requested and bpy_available():
+            resolved_backend = "BPY"
+        elif decimate_requested and bpy_available():
+            resolved_backend = "BPY"
+        elif decimate_requested and libigl_available():
+            resolved_backend = "LIBIGL"
+        elif decimate_requested:
+            resolved_backend = "TRIMESH"
+        else:
+            resolved_backend = "BPY" if bpy_available() else "TRIMESH"
+    elif backend == "BPY" and not bpy_available():
+        if allow_backend_fallback:
+            if decimate_requested and not symmetry_requested and libigl_available():
+                resolved_backend = "LIBIGL"
+            else:
+                resolved_backend = "TRIMESH"
+            backend_fallback_used = True
+        else:
+            raise QRemeshifyError(
+                "backend='BPY' requires Blender's Python modules to be installed and importable"
+            )
+    elif backend == "LIBIGL" and not libigl_available():
+        if allow_backend_fallback:
+            resolved_backend = "BPY" if bpy_available() else "TRIMESH"
+            backend_fallback_used = True
+        else:
+            raise QRemeshifyError(
+                "backend='LIBIGL' requires the 'libigl' Python package to be installed"
+            )
+
+    if symmetry_requested and resolved_backend != "BPY":
+        if allow_backend_fallback and bpy_available():
+            resolved_backend = "BPY"
+            backend_fallback_used = True
+        else:
+            raise QRemeshifyError(
+                "Symmetry preprocessing requires backend='BPY' unless backend fallback is enabled"
+            )
+
+    if decimate_requested and resolved_backend not in ("BPY", "LIBIGL", "TRIMESH"):
+        if allow_backend_fallback:
+            if bpy_available():
+                resolved_backend = "BPY"
+            elif libigl_available():
+                resolved_backend = "LIBIGL"
+            else:
+                resolved_backend = "TRIMESH"
+            backend_fallback_used = True
+        else:
+            raise QRemeshifyError(
+                "Decimation requires backend='BPY', backend='LIBIGL', or backend='TRIMESH' unless backend fallback is enabled"
+            )
+
+    return resolved_backend, backend_fallback_used
+
+
+def initialize_preprocess_metadata(
+    *,
+    input_kind: str,
+    backend: str,
+    allow_backend_fallback: bool,
+    symmetry_x: bool,
+    symmetry_y: bool,
+    symmetry_z: bool,
+    decimate_requested: bool,
+    decimate_target_faces: int,
+    decimate_ratio: float,
+    generate_sharp: bool,
+) -> dict[str, str]:
+    """Build the initial preprocessing metadata payload."""
+    return {
+        "input_kind": input_kind,
+        "preprocessed": "true",
+        "requested_backend": backend,
+        "allow_backend_fallback": str(bool(allow_backend_fallback)).lower(),
+        "symmetry_x": str(bool(symmetry_x)).lower(),
+        "symmetry_y": str(bool(symmetry_y)).lower(),
+        "symmetry_z": str(bool(symmetry_z)).lower(),
+        "decimate_enabled": str(bool(decimate_requested)).lower(),
+        "decimate_target_faces": str(int(decimate_target_faces)),
+        "decimate_ratio": f"{float(decimate_ratio):.6f}",
+        "generate_sharp": str(bool(generate_sharp)).lower(),
+    }
+
+
+def update_preprocess_metadata(
+    metadata: dict[str, str],
+    *,
+    input_stats: dict[str, int],
+    output_stats: dict[str, int],
+    resolved_backend: str,
+    backend_fallback_used: bool,
+    decimate_requested: bool,
+    decimate_reached_target: bool,
+    decimate_target_resolved: int,
+    edge_manifold: bool | None,
+    vertex_manifold: bool | None,
+) -> None:
+    """Populate final preprocessing metadata fields."""
+    metadata["face_count"] = str(output_stats["face_count"])
+    metadata["vertex_count"] = str(output_stats["vertex_count"])
+    metadata["edge_count"] = str(output_stats["edge_count"])
+    metadata["input_face_count"] = str(input_stats["face_count"])
+    metadata["input_vertex_count"] = str(input_stats["vertex_count"])
+    metadata["input_edge_count"] = str(input_stats["edge_count"])
+    metadata["resolved_backend"] = resolved_backend
+    metadata["backend_fallback_used"] = str(bool(backend_fallback_used)).lower()
+    metadata["decimate_backend"] = resolved_backend if decimate_requested else "NONE"
+    metadata["decimate_reached_target"] = str(bool(decimate_reached_target)).lower()
+    metadata["decimate_target_resolved"] = str(int(decimate_target_resolved))
+    if edge_manifold is not None:
+        metadata["libigl_edge_manifold"] = str(bool(edge_manifold)).lower()
+    if vertex_manifold is not None:
+        metadata["libigl_vertex_manifold"] = str(bool(vertex_manifold)).lower()
+
+
+def resolve_sharp_backend(
+    sharp_backend: str,
+    *,
+    allow_backend_fallback: bool,
+) -> str:
+    """Resolve the backend used for sharp-feature generation."""
+    resolved_sharp_backend = sharp_backend
+    if sharp_backend == "AUTO":
+        if bpy_available():
+            resolved_sharp_backend = "BPY"
+        elif libigl_sharp_edges_available():
+            resolved_sharp_backend = "LIBIGL"
+        else:
+            resolved_sharp_backend = "TRIMESH"
+    elif sharp_backend == "BPY" and not bpy_available():
+        if allow_backend_fallback:
+            resolved_sharp_backend = (
+                "LIBIGL" if libigl_sharp_edges_available() else "TRIMESH"
+            )
+        else:
+            raise QRemeshifyError(
+                "sharp_backend='BPY' requires Blender's Python modules to be installed and importable"
+            )
+    elif sharp_backend == "LIBIGL" and not libigl_sharp_edges_available():
+        if allow_backend_fallback:
+            resolved_sharp_backend = "BPY" if bpy_available() else "TRIMESH"
+        else:
+            raise QRemeshifyError(
+                "sharp_backend='LIBIGL' requires a libigl build that exposes igl.sharp_edges"
+            )
+    return resolved_sharp_backend
+
+
 def preprocess_mesh_input(
     input_mesh,
     backend="AUTO",
@@ -407,85 +568,26 @@ def preprocess_mesh_input(
         or decimate_ratio < 0.999999
     )
 
-    resolved_backend = backend
-    backend_fallback_used = False
-    if backend == "AUTO":
-        if symmetry_requested and bpy_available():
-            resolved_backend = "BPY"
-        elif decimate_requested and bpy_available():
-            resolved_backend = "BPY"
-        elif decimate_requested and libigl_available():
-            resolved_backend = "LIBIGL"
-        elif decimate_requested:
-            resolved_backend = "TRIMESH"
-        else:
-            resolved_backend = "BPY" if bpy_available() else "TRIMESH"
-    elif backend == "BPY" and not bpy_available():
-        if allow_backend_fallback:
-            if decimate_requested and not symmetry_requested and libigl_available():
-                resolved_backend = "LIBIGL"
-                backend_fallback_used = True
-            elif decimate_requested:
-                resolved_backend = "TRIMESH"
-                backend_fallback_used = True
-            else:
-                resolved_backend = "TRIMESH"
-                backend_fallback_used = True
-        else:
-            raise QRemeshifyError(
-                "backend='BPY' requires Blender's Python modules to be installed and importable"
-            )
-    elif backend == "LIBIGL" and not libigl_available():
-        if allow_backend_fallback:
-            if bpy_available():
-                resolved_backend = "BPY"
-                backend_fallback_used = True
-            else:
-                resolved_backend = "TRIMESH"
-                backend_fallback_used = True
-        else:
-            raise QRemeshifyError(
-                "backend='LIBIGL' requires the 'libigl' Python package to be installed"
-            )
-
-    if symmetry_requested and resolved_backend != "BPY":
-        if allow_backend_fallback and bpy_available():
-            resolved_backend = "BPY"
-            backend_fallback_used = True
-        else:
-            raise QRemeshifyError(
-                "Symmetry preprocessing requires backend='BPY' unless backend fallback is enabled"
-            )
-    if decimate_requested and resolved_backend not in ("BPY", "LIBIGL", "TRIMESH"):
-        if allow_backend_fallback:
-            if bpy_available():
-                resolved_backend = "BPY"
-                backend_fallback_used = True
-            elif libigl_available():
-                resolved_backend = "LIBIGL"
-                backend_fallback_used = True
-            else:
-                resolved_backend = "TRIMESH"
-                backend_fallback_used = True
-        else:
-            raise QRemeshifyError(
-                "Decimation requires backend='BPY', backend='LIBIGL', or backend='TRIMESH' unless backend fallback is enabled"
-            )
+    resolved_backend, backend_fallback_used = resolve_preprocess_backend(
+        backend,
+        symmetry_requested=symmetry_requested,
+        decimate_requested=decimate_requested,
+        allow_backend_fallback=allow_backend_fallback,
+    )
 
     input_stats: dict[str, int] | None = None
-    metadata = {
-        "input_kind": input_kind,
-        "preprocessed": "true",
-        "requested_backend": backend,
-        "allow_backend_fallback": str(bool(allow_backend_fallback)).lower(),
-        "symmetry_x": str(bool(symmetry_x)).lower(),
-        "symmetry_y": str(bool(symmetry_y)).lower(),
-        "symmetry_z": str(bool(symmetry_z)).lower(),
-        "decimate_enabled": str(bool(decimate_requested)).lower(),
-        "decimate_target_faces": str(int(decimate_target_faces)),
-        "decimate_ratio": f"{float(decimate_ratio):.6f}",
-        "generate_sharp": str(bool(generate_sharp)).lower(),
-    }
+    metadata = initialize_preprocess_metadata(
+        input_kind=input_kind,
+        backend=backend,
+        allow_backend_fallback=allow_backend_fallback,
+        symmetry_x=symmetry_x,
+        symmetry_y=symmetry_y,
+        symmetry_z=symmetry_z,
+        decimate_requested=decimate_requested,
+        decimate_target_faces=decimate_target_faces,
+        decimate_ratio=decimate_ratio,
+        generate_sharp=generate_sharp,
+    )
     decimate_reached_target = True
     decimate_target_resolved = 0
     edge_manifold = None
@@ -551,21 +653,18 @@ def preprocess_mesh_input(
     output_stats = build_mesh_stats(vertices, faces)
     if input_stats is None:
         input_stats = output_stats
-    metadata["face_count"] = str(output_stats["face_count"])
-    metadata["vertex_count"] = str(output_stats["vertex_count"])
-    metadata["edge_count"] = str(output_stats["edge_count"])
-    metadata["input_face_count"] = str(input_stats["face_count"])
-    metadata["input_vertex_count"] = str(input_stats["vertex_count"])
-    metadata["input_edge_count"] = str(input_stats["edge_count"])
-    metadata["resolved_backend"] = resolved_backend
-    metadata["backend_fallback_used"] = str(bool(backend_fallback_used)).lower()
-    metadata["decimate_backend"] = resolved_backend if decimate_requested else "NONE"
-    metadata["decimate_reached_target"] = str(bool(decimate_reached_target)).lower()
-    metadata["decimate_target_resolved"] = str(int(decimate_target_resolved))
-    if edge_manifold is not None:
-        metadata["libigl_edge_manifold"] = str(bool(edge_manifold)).lower()
-    if vertex_manifold is not None:
-        metadata["libigl_vertex_manifold"] = str(bool(vertex_manifold)).lower()
+    update_preprocess_metadata(
+        metadata,
+        input_stats=input_stats,
+        output_stats=output_stats,
+        resolved_backend=resolved_backend,
+        backend_fallback_used=backend_fallback_used,
+        decimate_requested=decimate_requested,
+        decimate_reached_target=decimate_reached_target,
+        decimate_target_resolved=decimate_target_resolved,
+        edge_manifold=edge_manifold,
+        vertex_manifold=vertex_manifold,
+    )
 
     mesh_artifact = build_mesh_artifact(
         obj_path=str(output_obj_path),
@@ -581,34 +680,10 @@ def preprocess_mesh_input(
     sharp_path = ""
     sharp_artifact = None
     if generate_sharp:
-        resolved_sharp_backend = sharp_backend
-        if sharp_backend == "AUTO":
-            if bpy_available():
-                resolved_sharp_backend = "BPY"
-            elif libigl_sharp_edges_available():
-                resolved_sharp_backend = "LIBIGL"
-            else:
-                resolved_sharp_backend = "TRIMESH"
-        elif sharp_backend == "BPY" and not bpy_available():
-            if allow_backend_fallback:
-                if libigl_sharp_edges_available():
-                    resolved_sharp_backend = "LIBIGL"
-                else:
-                    resolved_sharp_backend = "TRIMESH"
-            else:
-                raise QRemeshifyError(
-                    "sharp_backend='BPY' requires Blender's Python modules to be installed and importable"
-                )
-        elif sharp_backend == "LIBIGL" and not libigl_sharp_edges_available():
-            if allow_backend_fallback:
-                if bpy_available():
-                    resolved_sharp_backend = "BPY"
-                else:
-                    resolved_sharp_backend = "TRIMESH"
-            else:
-                raise QRemeshifyError(
-                    "sharp_backend='LIBIGL' requires a libigl build that exposes igl.sharp_edges"
-                )
+        resolved_sharp_backend = resolve_sharp_backend(
+            sharp_backend,
+            allow_backend_fallback=allow_backend_fallback,
+        )
         sharp_output_path = workspace_dir / f"{stem}.sharp"
         sharp_path = str(
             generate_sharp_features(
