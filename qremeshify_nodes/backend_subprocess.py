@@ -969,242 +969,71 @@ def _mesh_stats_from_bmesh(bm) -> dict[str, int]:
     }
 
 
-def _handle_probe(payload: dict) -> dict:
-    """Handle probe worker operation."""
-    return _run_probe(payload.get("probe_level", "APP_INFO"))
-
-
-def _handle_preprocess_mesh_backend(payload: dict) -> dict:
-    """Handle backend-agnostic preprocess operation."""
-    if payload["backend"] != "BPY":
-        return _import_repo_module("worker_backend_ops").run_backend_preprocess(
-            payload,
-            QRemeshifyError=QRemeshifyError,
-            _import_repo_module=_import_repo_module,
-        )
-
-    mesh_path = Path(payload["mesh_path"])
-    output_obj_path = Path(payload["output_obj_path"])
-    decimate_requested = bool(payload.get("decimate_enabled"))
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects, mesh_path.suffix.lower())
-        input_stats = _mesh_stats_from_bmesh(bm)
-        if payload["symmetry_x"] or payload["symmetry_y"] or payload["symmetry_z"]:
-            _apply_symmetry_preprocess_to_bmesh(
-                bm,
-                payload["symmetry_x"],
-                payload["symmetry_y"],
-                payload["symmetry_z"],
-                payload.get("tolerance", 1e-5),
-            )
-        if decimate_requested:
-            target_faces = _import_repo_module("worker_backend_ops").resolve_target_faces(
-                len(bm.faces),
-                int(payload.get("decimate_target_faces", 0)),
-                float(payload.get("decimate_ratio", 1.0)),
-            )
-            bm = _decimate_bmesh(
-                bm,
-                int(payload.get("decimate_target_faces", 0)),
-                float(payload.get("decimate_ratio", 1.0)),
-            )
-            decimate_reached_target = len(bm.faces) <= target_faces
-        else:
-            target_faces = 0
-            decimate_reached_target = True
-        output_stats = _mesh_stats_from_bmesh(bm)
-        _write_bmesh_obj(bm, output_obj_path)
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
-    return {
-        "output_obj_path": str(output_obj_path),
-        "input_stats": input_stats,
-        "output_stats": output_stats,
-        "decimate_reached_target": bool(decimate_reached_target),
-        "decimate_target_resolved": int(target_faces),
-    }
-
-
-def _handle_generate_sharp_features_backend(payload: dict) -> dict:
-    """Handle backend-agnostic sharp feature generation operation."""
-    if payload["backend"] != "BPY":
-        return _import_repo_module("worker_backend_ops").run_backend_sharp_generation(
-            payload,
-            QRemeshifyError=QRemeshifyError,
-            _import_repo_module=_import_repo_module,
-        )
-
-    mesh_path = Path(payload["mesh_path"])
-    normalized_obj_path = Path(payload["normalized_obj_path"])
-    output_path = Path(payload["output_path"])
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects, mesh_path.suffix.lower())
-        _write_bmesh_obj(bm, normalized_obj_path)
-        _write_sharp_file_from_bmesh(
-            bm,
-            float(payload["sharp_angle"]),
-            output_path,
-        )
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
-    return {
-        "normalized_obj_path": str(normalized_obj_path),
-        "output_path": str(output_path),
-    }
-
-
-def _handle_run_qremeshify_backend(payload: dict) -> dict:
-    """Handle native QRemeshify backend operation."""
-    return _import_repo_module("worker_backend_ops").run_qremeshify_backend(
-        payload,
-        _import_repo_module=_import_repo_module,
-    )
-
-
-def _handle_normalize_mesh_to_obj(payload: dict) -> dict:
-    """Handle OBJ normalization via BPY."""
-    mesh_path = Path(payload["mesh_path"])
-    output_obj_path = Path(payload["output_obj_path"])
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects, mesh_path.suffix.lower())
-        _write_bmesh_obj(bm, output_obj_path)
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
-    return {"output_obj_path": str(output_obj_path)}
-
-
-def _handle_preprocess_obj_with_symmetry(payload: dict) -> dict:
-    """Handle symmetry-only preprocessing via BPY."""
-    mesh_path = Path(payload["mesh_path"])
-    output_obj_path = Path(payload["output_obj_path"])
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects, mesh_path.suffix.lower())
-        _apply_symmetry_preprocess_to_bmesh(
-            bm,
-            payload["symmetry_x"],
-            payload["symmetry_y"],
-            payload["symmetry_z"],
-            payload.get("tolerance", 1e-5),
-        )
-        _write_bmesh_obj(bm, output_obj_path)
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
-    return {"output_obj_path": str(output_obj_path)}
-
-
-def _handle_preprocess_mesh(payload: dict) -> dict:
-    """Handle full BPY mesh preprocessing."""
-    mesh_path = Path(payload["mesh_path"])
-    output_obj_path = Path(payload["output_obj_path"])
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects, mesh_path.suffix.lower())
-        if payload["symmetry_x"] or payload["symmetry_y"] or payload["symmetry_z"]:
-            _apply_symmetry_preprocess_to_bmesh(
-                bm,
-                payload["symmetry_x"],
-                payload["symmetry_y"],
-                payload["symmetry_z"],
-                payload.get("tolerance", 1e-5),
-            )
-        if payload.get("decimate_enabled"):
-            bm = _decimate_bmesh(
-                bm,
-                int(payload.get("decimate_target_faces", 0)),
-                float(payload.get("decimate_ratio", 1.0)),
-            )
-        _write_bmesh_obj(bm, output_obj_path)
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
-    return {"output_obj_path": str(output_obj_path)}
-
-
-def _handle_normalize_mesh_and_generate_sharp(payload: dict) -> dict:
-    """Handle BPY normalization plus sharp-feature extraction."""
-    mesh_path = Path(payload["mesh_path"])
-    normalized_obj_path = Path(payload["normalized_obj_path"])
-    output_path = Path(payload["output_path"])
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects, mesh_path.suffix.lower())
-        _write_bmesh_obj(bm, normalized_obj_path)
-        _write_sharp_file_from_bmesh(
-            bm,
-            payload["sharp_angle"],
-            output_path,
-        )
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
-    return {
-        "normalized_obj_path": str(normalized_obj_path),
-        "output_path": str(output_path),
-    }
-
-
-def _handle_postprocess_obj_with_symmetry(payload: dict) -> dict:
-    """Handle postprocess symmetry mirroring via BPY."""
-    mesh_path = Path(payload["mesh_path"])
-    output_obj_path = Path(payload["output_obj_path"])
-    bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
-    bm = None
-    try:
-        bm = _build_bmesh_from_objects(imported_objects, mesh_path.suffix.lower())
-        _apply_symmetry_postprocess_to_bmesh(
-            bm,
-            payload["symmetry_x"],
-            payload["symmetry_y"],
-            payload["symmetry_z"],
-            payload.get("tolerance", 1e-5),
-        )
-        _write_bmesh_obj(bm, output_obj_path)
-    finally:
-        if bm is not None:
-            bm.free()
-        _cleanup_imported_objects(bpy, imported_objects)
-    return {"output_obj_path": str(output_obj_path)}
-
-
-WORKER_OPERATION_HANDLERS = {
-    "probe": _handle_probe,
-    "preprocess_mesh_backend": _handle_preprocess_mesh_backend,
-    "generate_sharp_features_backend": _handle_generate_sharp_features_backend,
-    "run_qremeshify_backend": _handle_run_qremeshify_backend,
-    "normalize_mesh_to_obj": _handle_normalize_mesh_to_obj,
-    "preprocess_obj_with_symmetry": _handle_preprocess_obj_with_symmetry,
-    "preprocess_mesh": _handle_preprocess_mesh,
-    "normalize_mesh_and_generate_sharp": _handle_normalize_mesh_and_generate_sharp,
-    "postprocess_obj_with_symmetry": _handle_postprocess_obj_with_symmetry,
+WORKER_DEFAULT_BACKENDS = {
+    "probe": "BPY",
+    "normalize_mesh_to_obj": "BPY",
+    "preprocess_obj_with_symmetry": "BPY",
+    "preprocess_mesh": "BPY",
+    "normalize_mesh_and_generate_sharp": "BPY",
+    "postprocess_obj_with_symmetry": "BPY",
+    "preprocess_mesh_backend": "BPY",
+    "generate_sharp_features_backend": "BPY",
+    "run_qremeshify_backend": "QREMESHIFY",
 }
 
 
-def _dispatch_worker(payload: dict) -> dict:
-    """Dispatch worker to perform operations."""
+@lru_cache(maxsize=1)
+def _get_bpy_operation_handlers() -> dict[str, callable]:
+    """Build the BPY worker operation registry once per process."""
+    worker_bpy_ops = _import_repo_module("worker_bpy_ops")
+    resolve_target_faces = _import_repo_module("worker_backend_ops").resolve_target_faces
+    return worker_bpy_ops.build_bpy_operation_handlers(
+        _run_probe=_run_probe,
+        _import_mesh_with_bpy=_import_mesh_with_bpy,
+        _build_bmesh_from_objects=_build_bmesh_from_objects,
+        _cleanup_imported_objects=_cleanup_imported_objects,
+        _apply_symmetry_preprocess_to_bmesh=_apply_symmetry_preprocess_to_bmesh,
+        _apply_symmetry_postprocess_to_bmesh=_apply_symmetry_postprocess_to_bmesh,
+        _decimate_bmesh=_decimate_bmesh,
+        _write_bmesh_obj=_write_bmesh_obj,
+        _write_sharp_file_from_bmesh=_write_sharp_file_from_bmesh,
+        _mesh_stats_from_bmesh=_mesh_stats_from_bmesh,
+        resolve_target_faces=resolve_target_faces,
+    )
+
+
+def _resolve_worker_backend(payload: dict) -> str:
+    """Resolve which backend worker should own an operation."""
     operation = payload["operation"]
-    handler = WORKER_OPERATION_HANDLERS.get(operation)
-    if handler is None:
-        raise QRemeshifyError(f"Unsupported backend subprocess operation: {operation}")
+    backend = payload.get("backend") or WORKER_DEFAULT_BACKENDS.get(operation)
+    if not backend:
+        raise QRemeshifyError(
+            f"Unsupported backend subprocess operation without backend mapping: {operation}"
+        )
+    return str(backend).upper()
+
+
+def _resolve_worker_handler(payload: dict):
+    """Resolve the concrete worker handler from backend and operation registries."""
+    operation = payload["operation"]
+    backend = _resolve_worker_backend(payload)
+    if backend == "BPY":
+        handler = _get_bpy_operation_handlers().get(operation)
+        if handler is None:
+            raise QRemeshifyError(
+                f"Unsupported BPY worker operation: backend={backend}, operation={operation}"
+            )
+        return handler
+    return _import_repo_module("worker_backend_ops").resolve_backend_operation_handler(
+        backend,
+        operation,
+        QRemeshifyError=QRemeshifyError,
+    )
+
+
+def _dispatch_worker(payload: dict) -> dict:
+    """Dispatch one subprocess request to the correct backend worker handler."""
+    handler = _resolve_worker_handler(payload)
     return handler(payload)
 
 

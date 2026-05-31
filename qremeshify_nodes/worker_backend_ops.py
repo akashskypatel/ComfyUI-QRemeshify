@@ -411,3 +411,39 @@ def run_qremeshify_backend(
         "output_smoothed_path": str(backend.output_smoothed_path),
         "final_path": str(final_path),
     }
+
+
+BACKEND_OPERATION_HANDLERS = {
+    "LIBIGL": {
+        "preprocess_mesh_backend": _run_libigl_preprocess_backend,
+        "generate_sharp_features_backend": _run_libigl_sharp_generation_backend,
+    },
+    "TRIMESH": {
+        "preprocess_mesh_backend": _run_trimesh_preprocess_backend,
+        "generate_sharp_features_backend": _run_trimesh_sharp_generation_backend,
+    },
+    "QREMESHIFY": {
+        "run_qremeshify_backend": run_qremeshify_backend,
+    },
+}
+
+
+def get_backend_operation_handlers(backend: str) -> dict[str, callable]:
+    """Return the registered operation handlers for a backend."""
+    return BACKEND_OPERATION_HANDLERS.get(str(backend).upper(), {})
+
+
+def resolve_backend_operation_handler(
+    backend: str,
+    operation: str,
+    *,
+    QRemeshifyError,
+):
+    """Resolve one backend operation handler from the centralized registry."""
+    handlers = get_backend_operation_handlers(backend)
+    handler = handlers.get(operation)
+    if handler is None:
+        raise QRemeshifyError(
+            f"Unsupported backend worker operation: backend={backend}, operation={operation}"
+        )
+    return handler
