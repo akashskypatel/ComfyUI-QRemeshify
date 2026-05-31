@@ -9,15 +9,14 @@ import numpy as np
 from .artifacts import (
     build_mesh_artifact,
     build_sharp_artifact,
-    mesh_arrays_to_lists,
     parse_obj_payload,
     parse_sharp_payload,
 )
-from .blender_backend import bpy_available, preprocess_mesh_with_bpy
+from .blender_backend import bpy_available
+from .bpy_subprocess import preprocess_mesh_with_backend_subprocess
 from .errors import QRemeshifyError
-from .libigl_compat import require_igl, write_triangle_obj_with_libigl
+from .libigl_compat import require_igl
 from .mesh_io import (
-    load_triangle_mesh_with_trimesh,
     prepare_mesh_workspace,
     prepare_output_workspace,
     write_triangle_obj,
@@ -495,12 +494,17 @@ def preprocess_mesh_input(
     if input_kind == "mesh":
         vertices, faces = extract_mesh_arrays(input_mesh)
         input_stats = build_mesh_stats(vertices, faces)
-        if resolved_backend == "BPY" and (symmetry_requested or decimate_requested):
-            source_mesh = workspace_dir / f"{stem}_source.obj"
-            write_triangle_obj(source_mesh, vertices, faces)
-            preprocess_mesh_with_bpy(
+        source_mesh = workspace_dir / f"{stem}_source.obj"
+        write_triangle_obj(source_mesh, vertices, faces)
+
+    preprocess_result = None
+    attempted_fallback = False
+    while True:
+        try:
+            preprocess_result = preprocess_mesh_with_backend_subprocess(
                 source_mesh,
                 output_obj_path,
+                resolved_backend,
                 symmetry_x=symmetry_x,
                 symmetry_y=symmetry_y,
                 symmetry_z=symmetry_z,
@@ -508,126 +512,41 @@ def preprocess_mesh_input(
                 decimate_target_faces=decimate_target_faces,
                 decimate_ratio=decimate_ratio,
             )
-            vertices, faces = parse_obj_payload(str(output_obj_path))
-        elif resolved_backend == "LIBIGL":
-            if decimate_requested:
-                edge_manifold, vertex_manifold = inspect_libigl_manifold(faces)
-                if not (edge_manifold and vertex_manifold):
-                    if allow_backend_fallback and bpy_available():
-                        source_mesh = workspace_dir / f"{stem}_source.obj"
-                        write_triangle_obj(source_mesh, vertices, faces)
-                        preprocess_mesh_with_bpy(
-                            source_mesh,
-                            output_obj_path,
-                            symmetry_x=symmetry_x,
-                            symmetry_y=symmetry_y,
-                            symmetry_z=symmetry_z,
-                            decimate_enabled=decimate_enabled,
-                            decimate_target_faces=decimate_target_faces,
-                            decimate_ratio=decimate_ratio,
-                        )
-                        vertices, faces = parse_obj_payload(str(output_obj_path))
-                        resolved_backend = "BPY"
-                        backend_fallback_used = True
-                    else:
-                        raise QRemeshifyError(
-                            "backend='LIBIGL' decimation requires a manifold triangle mesh. "
-                            f"is_edge_manifold={edge_manifold}, is_vertex_manifold={vertex_manifold}"
-                        )
-            if resolved_backend == "LIBIGL" and decimate_requested:
-                vertices, faces, decimate_reached_target, decimate_target_resolved = (
-                    decimate_mesh_with_libigl(
-                        vertices,
-                        faces,
-                        decimate_target_faces,
-                        decimate_ratio,
-                    )
-                )
-            if resolved_backend == "LIBIGL":
-                write_triangle_obj_with_libigl(output_obj_path, vertices, faces)
-                vertices, faces = mesh_arrays_to_lists(vertices, faces)
-        elif resolved_backend == "TRIMESH":
-            if decimate_requested:
-                vertices, faces, decimate_reached_target, decimate_target_resolved = (
-                    decimate_mesh_with_trimesh(
-                        vertices,
-                        faces,
-                        decimate_target_faces,
-                        decimate_ratio,
-                    )
-                )
-            write_triangle_obj(output_obj_path, vertices, faces)
-            vertices, faces = mesh_arrays_to_lists(vertices, faces)
-        else:
-            write_triangle_obj(output_obj_path, vertices, faces)
-            vertices, faces = mesh_arrays_to_lists(vertices, faces)
-    elif resolved_backend == "BPY":
-        input_vertices, input_faces = load_triangle_mesh_with_trimesh(source_mesh)
-        input_stats = build_mesh_stats(input_vertices, input_faces)
-        preprocess_mesh_with_bpy(
-            source_mesh,
-            output_obj_path,
-            symmetry_x=symmetry_x,
-            symmetry_y=symmetry_y,
-            symmetry_z=symmetry_z,
-            decimate_enabled=decimate_enabled,
-            decimate_target_faces=decimate_target_faces,
-            decimate_ratio=decimate_ratio,
-        )
-        vertices, faces = parse_obj_payload(str(output_obj_path))
-    elif resolved_backend == "LIBIGL":
-        vertices, faces = load_triangle_mesh_with_libigl(source_mesh)
-        input_stats = build_mesh_stats(vertices, faces)
-        if decimate_requested:
-            edge_manifold, vertex_manifold = inspect_libigl_manifold(faces)
-            if not (edge_manifold and vertex_manifold):
-                if allow_backend_fallback and bpy_available():
-                    preprocess_mesh_with_bpy(
-                        source_mesh,
-                        output_obj_path,
-                        symmetry_x=symmetry_x,
-                        symmetry_y=symmetry_y,
-                        symmetry_z=symmetry_z,
-                        decimate_enabled=decimate_enabled,
-                        decimate_target_faces=decimate_target_faces,
-                        decimate_ratio=decimate_ratio,
-                    )
-                    vertices, faces = parse_obj_payload(str(output_obj_path))
-                    resolved_backend = "BPY"
-                    backend_fallback_used = True
-                else:
-                    raise QRemeshifyError(
-                        "backend='LIBIGL' decimation requires a manifold triangle mesh. "
-                        f"is_edge_manifold={edge_manifold}, is_vertex_manifold={vertex_manifold}"
-                    )
-        if resolved_backend == "LIBIGL" and decimate_requested:
-            vertices, faces, decimate_reached_target, decimate_target_resolved = (
-                decimate_mesh_with_libigl(
-                    vertices,
-                    faces,
-                    decimate_target_faces,
-                    decimate_ratio,
-                )
-            )
-        if resolved_backend == "LIBIGL":
-            write_triangle_obj_with_libigl(output_obj_path, vertices, faces)
-            vertices, faces = mesh_arrays_to_lists(vertices, faces)
-    elif resolved_backend == "TRIMESH":
-        vertices, faces = load_triangle_mesh_with_trimesh(source_mesh)
-        input_stats = build_mesh_stats(vertices, faces)
-        if decimate_requested:
-            vertices, faces, decimate_reached_target, decimate_target_resolved = (
-                decimate_mesh_with_trimesh(
-                    vertices,
-                    faces,
-                    decimate_target_faces,
-                    decimate_ratio,
-                )
-            )
-        write_triangle_obj(output_obj_path, vertices, faces)
-        vertices, faces = mesh_arrays_to_lists(vertices, faces)
-    else:
-        raise QRemeshifyError(f"Unsupported preprocessing backend: {resolved_backend}")
+            break
+        except QRemeshifyError as exc:
+            message = str(exc)
+            if (
+                resolved_backend == "LIBIGL"
+                and allow_backend_fallback
+                and not attempted_fallback
+                and "requires a manifold triangle mesh" in message
+                and bpy_available()
+            ):
+                resolved_backend = "BPY"
+                backend_fallback_used = True
+                attempted_fallback = True
+                continue
+            raise
+
+    vertices, faces = parse_obj_payload(str(output_obj_path))
+    if input_stats is None:
+        result_input_stats = preprocess_result.get("input_stats")
+        if isinstance(result_input_stats, dict):
+            input_stats = {
+                "vertex_count": int(result_input_stats["vertex_count"]),
+                "face_count": int(result_input_stats["face_count"]),
+                "edge_count": int(result_input_stats["edge_count"]),
+            }
+    decimate_reached_target = bool(
+        preprocess_result.get("decimate_reached_target", True)
+    )
+    decimate_target_resolved = int(
+        preprocess_result.get("decimate_target_resolved", 0)
+    )
+    if "edge_manifold" in preprocess_result:
+        edge_manifold = bool(preprocess_result["edge_manifold"])
+    if "vertex_manifold" in preprocess_result:
+        vertex_manifold = bool(preprocess_result["vertex_manifold"])
 
     output_stats = build_mesh_stats(vertices, faces)
     if input_stats is None:

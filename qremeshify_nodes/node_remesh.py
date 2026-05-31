@@ -14,7 +14,7 @@ from .artifacts import (
     resolve_mesh_input,
     resolve_sharp_input,
 )
-from .backend import QuadwildBackend
+from .bpy_subprocess import run_qremeshify_backend_subprocess
 from .constants import NODE_CATEGORY
 from .errors import QRemeshifyError
 from .load_3d_input import (
@@ -241,7 +241,13 @@ class QRemeshifyOBJ(IO.ComfyNode):
                 "ignore_high_poly_guard=true to continue at your own risk."
             )
 
-        backend = QuadwildBackend(working_obj)
+        mesh_prefix = str(working_obj.with_suffix(""))
+        remeshed_path = Path(f"{mesh_prefix}_rem.obj")
+        traced_path = Path(f"{mesh_prefix}_rem_p0.obj")
+        output_path = Path(f"{mesh_prefix}_rem_p0_0_quadrangulation.obj")
+        output_smoothed_path = Path(
+            f"{mesh_prefix}_rem_p0_0_quadrangulation_smooth.obj"
+        )
 
         if use_cache and not output_dir.strip():
             raise QRemeshifyError(
@@ -253,24 +259,24 @@ class QRemeshifyOBJ(IO.ComfyNode):
             raise FileNotFoundError(Path(sharp_path).expanduser().resolve())
 
         if use_cache:
-            if not backend.traced_path.exists():
+            if not traced_path.exists():
                 raise QRemeshifyError(
-                    f"use_cache=True requires an existing traced mesh at {backend.traced_path}. "
+                    f"use_cache=True requires an existing traced mesh at {traced_path}. "
                     "Run once with use_cache=False in the same output_dir first."
                 )
-        else:
-            if sharp_payload_available:
-                sharp_path = materialize_sharp_artifact(
-                    sharp_artifact,
-                    str(workspace_dir / f"{working_obj.stem}_artifact.sharp"),
-                )
-            elif sharp_path:
-                sharp_path = str(Path(sharp_path).expanduser().resolve())
+        elif sharp_payload_available:
+            sharp_path = materialize_sharp_artifact(
+                sharp_artifact,
+                str(workspace_dir / f"{working_obj.stem}_artifact.sharp"),
+            )
+        elif sharp_path:
+            sharp_path = str(Path(sharp_path).expanduser().resolve())
 
-            backend.remesh_and_field(True, sharp_path, sharp_angle)
-            backend.trace()
-
-        backend.quadrangulate(
+        result = run_qremeshify_backend_subprocess(
+            mesh_path=working_obj,
+            remesh=not use_cache,
+            sharp_features_path=sharp_path,
+            sharp_angle=sharp_angle,
             enable_smoothing=smooth,
             scale_fact=scale_factor,
             fixed_chart_clusters=fixed_chart_clusters,
@@ -296,12 +302,14 @@ class QRemeshifyOBJ(IO.ComfyNode):
             callback_gap_limit=gap_limits,
         )
 
-        final_path = backend.output_smoothed_path if smooth else backend.output_path
+        remeshed_path = Path(result["remeshed_path"])
+        traced_path = Path(result["traced_path"])
+        output_path = Path(result["output_path"])
+        output_smoothed_path = Path(result["output_smoothed_path"])
+        final_path = Path(result["final_path"])
         final_vertices, final_faces = parse_obj_payload(str(final_path))
-        remeshed_vertices, remeshed_faces = parse_obj_payload(
-            str(backend.remeshed_path)
-        )
-        traced_vertices, traced_faces = parse_obj_payload(str(backend.traced_path))
+        remeshed_vertices, remeshed_faces = parse_obj_payload(str(remeshed_path))
+        traced_vertices, traced_faces = parse_obj_payload(str(traced_path))
         output_mesh_artifact = build_mesh_artifact(
             obj_path=str(final_path),
             vertices=final_vertices,
@@ -318,31 +326,31 @@ class QRemeshifyOBJ(IO.ComfyNode):
             },
         )
         remeshed_mesh_artifact = build_mesh_artifact(
-            obj_path=str(backend.remeshed_path),
+            obj_path=str(remeshed_path),
             vertices=remeshed_vertices,
             faces=remeshed_faces,
             workspace_dir=str(workspace_dir),
             source_path=str(working_obj),
             backend="QREMESHIFY",
-            label=backend.remeshed_path.stem,
+            label=remeshed_path.stem,
             metadata={"stage": "remeshed"},
         )
         traced_mesh_artifact = build_mesh_artifact(
-            obj_path=str(backend.traced_path),
+            obj_path=str(traced_path),
             vertices=traced_vertices,
             faces=traced_faces,
             workspace_dir=str(workspace_dir),
             source_path=str(working_obj),
             backend="QREMESHIFY",
-            label=backend.traced_path.stem,
+            label=traced_path.stem,
             metadata={"stage": "traced"},
         )
         model_3d = Types.File3D(str(final_path))
         return IO.NodeOutput(
             str(final_path),
             str(workspace_dir),
-            str(backend.remeshed_path),
-            str(backend.traced_path),
+            str(remeshed_path),
+            str(traced_path),
             model_3d,
             output_mesh_artifact,
             remeshed_mesh_artifact,

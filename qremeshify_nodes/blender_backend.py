@@ -102,9 +102,17 @@ def _import_mesh_with_bpy(mesh_path: Path):
         before = {obj.as_pointer() for obj in bpy.data.objects}
         if ext == ".obj":
             if hasattr(bpy.ops.wm, "obj_import"):
-                bpy.ops.wm.obj_import(filepath=str(import_path))
+                bpy.ops.wm.obj_import(
+                    filepath=str(import_path),
+                    forward_axis="Y",
+                    up_axis="Z",
+                )
             else:  # pragma: no cover - older Blender path
-                bpy.ops.import_scene.obj(filepath=str(import_path))
+                bpy.ops.import_scene.obj(
+                    filepath=str(import_path),
+                    axis_forward="Y",
+                    axis_up="Z",
+                )
         elif ext == ".stl":
             if hasattr(bpy.ops.wm, "stl_import"):
                 bpy.ops.wm.stl_import(filepath=str(import_path))
@@ -141,7 +149,7 @@ def _import_mesh_with_bpy(mesh_path: Path):
             temp_dir.rmdir()
 
 
-def _build_bmesh_from_objects(imported_objects):
+def _build_bmesh_from_objects(imported_objects, source_ext: str | None = None):
     """Build bmesh from imported objects.
     
     Args:
@@ -160,8 +168,14 @@ def _build_bmesh_from_objects(imported_objects):
         try:
             temp_bm = bmesh.new()
             temp_bm.from_mesh(mesh)
+            transform_matrix = evaluated_obj.matrix_world
+            if source_ext in {".glb", ".gltf"}:
+                transform_matrix = _matrix_without_gltf_basis_corrections(
+                    obj,
+                    transform_matrix,
+                )
             bmesh.ops.transform(
-                temp_bm, matrix=evaluated_obj.matrix_world, verts=temp_bm.verts
+                temp_bm, matrix=transform_matrix, verts=temp_bm.verts
             )
             temp_mesh = bpy.data.meshes.new(name="QRemeshifyTempMesh")
             try:
@@ -180,6 +194,46 @@ def _build_bmesh_from_objects(imported_objects):
     merged.edges.ensure_lookup_table()
     merged.verts.ensure_lookup_table()
     return merged
+
+
+def _is_gltf_basis_correction_matrix(matrix, tolerance: float = 1e-5) -> bool:
+    """Return True if a transform looks like a pure glTF basis correction."""
+    import math
+
+    translation, rotation, scale = matrix.decompose()
+    if translation.length > tolerance:
+        return False
+    if any(abs(component - 1.0) > tolerance for component in scale):
+        return False
+
+    euler = rotation.to_euler("XYZ")
+    quarter_turn = math.pi / 2.0
+    return (
+        abs(abs(euler.x) - quarter_turn) <= 1e-4
+        and abs(euler.y) <= 1e-4
+        and abs(euler.z) <= 1e-4
+    )
+
+
+def _matrix_without_gltf_basis_corrections(obj, matrix_world):
+    """Strip basis-only ancestor transforms introduced by Blender glTF import."""
+    _, _, mathutils = _require_bpy()
+
+    correction = mathutils.Matrix.Identity(4)
+    current = obj.parent
+    stack = []
+    while current is not None:
+        stack.append(current)
+        current = current.parent
+
+    for ancestor in reversed(stack):
+        local_matrix = ancestor.matrix_local.copy()
+        if _is_gltf_basis_correction_matrix(local_matrix):
+            correction = correction @ local_matrix
+
+    if correction == mathutils.Matrix.Identity(4):
+        return matrix_world
+    return correction.inverted() @ matrix_world
 
 
 def _active_symmetry_axes(symmetry_x: bool, symmetry_y: bool, symmetry_z: bool):

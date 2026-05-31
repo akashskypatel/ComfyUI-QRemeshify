@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .blender_backend import normalize_mesh_and_generate_sharp_with_bpy
+from .bpy_subprocess import generate_sharp_features_with_backend_subprocess
 from .errors import QRemeshifyError
 from .libigl_compat import require_igl, write_triangle_obj_with_libigl
 from .mesh_io import compute_face_normals, load_triangle_mesh_with_trimesh, write_triangle_obj
@@ -233,17 +233,12 @@ def generate_sharp_features(
     Raises:
         QRemeshifyError: If the backend is not supported or if required packages are not installed
     """
-    if backend == "BPY":
-        return normalize_mesh_and_generate_sharp_with_bpy(
-            mesh_path,
-            normalized_obj_path,
-            sharp_angle,
-            output_path,
-        )
-    if backend == "LIBIGL":
-        vertices, faces = load_triangle_mesh_with_libigl(mesh_path)
-        write_triangle_obj_with_libigl(normalized_obj_path, vertices, faces)
-        return generate_sharp_features_with_libigl(normalized_obj_path, sharp_angle, output_path)
-    if backend == "TRIMESH":
-        return generate_sharp_features_with_trimesh(mesh_path, normalized_obj_path, sharp_angle, output_path)
-    raise QRemeshifyError(f"Unsupported sharp feature backend: {backend}")
+    if backend not in {"BPY", "LIBIGL", "TRIMESH"}:
+        raise QRemeshifyError(f"Unsupported sharp feature backend: {backend}")
+    return generate_sharp_features_with_backend_subprocess(
+        mesh_path,
+        normalized_obj_path,
+        sharp_angle,
+        output_path,
+        backend,
+    )
