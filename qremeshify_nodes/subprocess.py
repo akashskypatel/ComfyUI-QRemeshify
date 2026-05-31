@@ -42,7 +42,7 @@ def _import_repo_module(module_name: str):
     return importlib.import_module(f"qremeshify_nodes.{module_name}")
 
 
-def _run_bpy_subprocess(payload: dict) -> dict:
+def _run_subprocess(payload: dict) -> dict:
     """Run bpy operation in a separate Python process.
     
     Args:
@@ -108,7 +108,7 @@ def bpy_available_via_subprocess() -> bool:
         bool: True if bpy is available, False otherwise
     """
     try:
-        _run_bpy_subprocess({"operation": "probe", "probe_level": "BMESH"})
+        _run_subprocess({"operation": "probe", "probe_level": "BMESH"})
     except Exception:
         return False
     return True
@@ -123,10 +123,10 @@ def run_bpy_probe(probe_level: str) -> dict:
     Returns:
         Dictionary with probe result
     """
-    return _run_bpy_subprocess({"operation": "probe", "probe_level": probe_level})
+    return _run_subprocess({"operation": "probe", "probe_level": probe_level})
 
 
-def normalize_mesh_to_obj_with_bpy_subprocess(
+def normalize_mesh_to_obj_with_subprocess(
     mesh_path: Path, output_obj_path: Path
 ) -> Path:
     """Normalize mesh to OBJ using bpy subprocess.
@@ -138,7 +138,7 @@ def normalize_mesh_to_obj_with_bpy_subprocess(
     Returns:
         Path: Path to normalized OBJ
     """
-    _run_bpy_subprocess(
+    _run_subprocess(
         {
             "operation": "normalize_mesh_to_obj",
             "mesh_path": str(mesh_path),
@@ -148,7 +148,7 @@ def normalize_mesh_to_obj_with_bpy_subprocess(
     return output_obj_path
 
 
-def preprocess_obj_with_symmetry_with_bpy_subprocess(
+def preprocess_obj_with_symmetry_with_subprocess(
     mesh_path: Path,
     output_obj_path: Path,
     symmetry_x: bool,
@@ -169,7 +169,7 @@ def preprocess_obj_with_symmetry_with_bpy_subprocess(
     Returns:
         Path: Path to preprocessed OBJ
     """
-    _run_bpy_subprocess(
+    _run_subprocess(
         {
             "operation": "preprocess_obj_with_symmetry",
             "mesh_path": str(mesh_path),
@@ -183,7 +183,7 @@ def preprocess_obj_with_symmetry_with_bpy_subprocess(
     return output_obj_path
 
 
-def preprocess_mesh_with_bpy_subprocess(
+def preprocess_mesh_with_subprocess(
     mesh_path: Path,
     output_obj_path: Path,
     symmetry_x: bool = False,
@@ -210,7 +210,7 @@ def preprocess_mesh_with_bpy_subprocess(
     Returns:
         Path: Path to preprocessed OBJ
     """
-    _run_bpy_subprocess(
+    _run_subprocess(
         {
             "operation": "preprocess_mesh",
             "mesh_path": str(mesh_path),
@@ -227,7 +227,7 @@ def preprocess_mesh_with_bpy_subprocess(
     return output_obj_path
 
 
-def normalize_mesh_and_generate_sharp_with_bpy_subprocess(
+def normalize_mesh_and_generate_sharp_with_subprocess(
     mesh_path: Path,
     normalized_obj_path: Path,
     sharp_angle: float,
@@ -244,7 +244,7 @@ def normalize_mesh_and_generate_sharp_with_bpy_subprocess(
     Returns:
         Path: Path to output OBJ
     """
-    _run_bpy_subprocess(
+    _run_subprocess(
         {
             "operation": "normalize_mesh_and_generate_sharp",
             "mesh_path": str(mesh_path),
@@ -269,7 +269,7 @@ def preprocess_mesh_with_backend_subprocess(
     tolerance: float = 1e-5,
 ) -> dict:
     """Preprocess a mesh with the selected backend in an isolated subprocess."""
-    return _run_bpy_subprocess(
+    return _run_subprocess(
         {
             "operation": "preprocess_mesh_backend",
             "mesh_path": str(mesh_path),
@@ -294,7 +294,7 @@ def generate_sharp_features_with_backend_subprocess(
     backend: str,
 ) -> Path:
     """Generate sharp features with the selected backend in an isolated subprocess."""
-    _run_bpy_subprocess(
+    _run_subprocess(
         {
             "operation": "generate_sharp_features_backend",
             "mesh_path": str(mesh_path),
@@ -337,7 +337,7 @@ def run_qremeshify_backend_subprocess(
     callback_gap_limit: list[float],
 ) -> dict:
     """Run the native QRemeshify backend in an isolated subprocess."""
-    return _run_bpy_subprocess(
+    return _run_subprocess(
         {
             "operation": "run_qremeshify_backend",
             "mesh_path": str(mesh_path),
@@ -379,7 +379,7 @@ def run_qremeshify_backend_subprocess(
     )
 
 
-def postprocess_obj_with_symmetry_with_bpy_subprocess(
+def postprocess_obj_with_symmetry_with_subprocess(
     mesh_path: Path,
     output_obj_path: Path,
     symmetry_x: bool,
@@ -400,7 +400,7 @@ def postprocess_obj_with_symmetry_with_bpy_subprocess(
     Returns:
         Path: Path to postprocessed OBJ
     """
-    _run_bpy_subprocess(
+    _run_subprocess(
         {
             "operation": "postprocess_obj_with_symmetry",
             "mesh_path": str(mesh_path),
@@ -985,9 +985,7 @@ def _handle_preprocess_mesh_backend(payload: dict) -> dict:
 
     mesh_path = Path(payload["mesh_path"])
     output_obj_path = Path(payload["output_obj_path"])
-    decimate_requested = bool(payload.get("decimate_enabled")) or int(
-        payload.get("decimate_target_faces", 0)
-    ) > 0 or float(payload.get("decimate_ratio", 1.0)) < 0.999999
+    decimate_requested = bool(payload.get("decimate_enabled"))
     bpy, imported_objects = _import_mesh_with_bpy(mesh_path)
     bm = None
     try:
@@ -1126,7 +1124,7 @@ def _handle_preprocess_mesh(payload: dict) -> dict:
                 payload["symmetry_z"],
                 payload.get("tolerance", 1e-5),
             )
-        if payload.get("decimate_enabled") or payload.get("decimate_target_faces", 0) > 0:
+        if payload.get("decimate_enabled"):
             bm = _decimate_bmesh(
                 bm,
                 int(payload.get("decimate_target_faces", 0)),

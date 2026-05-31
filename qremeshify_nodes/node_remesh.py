@@ -14,7 +14,7 @@ from .artifacts import (
     resolve_mesh_input,
     resolve_sharp_input,
 )
-from .bpy_subprocess import run_qremeshify_backend_subprocess
+from .subprocess import run_qremeshify_backend_subprocess
 from .constants import NODE_CATEGORY
 from .errors import QRemeshifyError
 from .load_3d_input import (

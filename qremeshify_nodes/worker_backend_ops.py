@@ -108,9 +108,7 @@ def run_backend_preprocess(
     backend = payload["backend"]
     mesh_path = Path(payload["mesh_path"])
     output_obj_path = Path(payload["output_obj_path"])
-    decimate_requested = bool(payload.get("decimate_enabled")) or int(
-        payload.get("decimate_target_faces", 0)
-    ) > 0 or float(payload.get("decimate_ratio", 1.0)) < 0.999999
+    decimate_requested = bool(payload.get("decimate_enabled"))
 
     mesh_io = _import_repo_module("mesh_io")
     if backend == "LIBIGL":

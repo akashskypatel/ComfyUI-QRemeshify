@@ -13,7 +13,7 @@ from .artifacts import (
     parse_sharp_payload,
 )
 from .blender_backend import bpy_available
-from .bpy_subprocess import preprocess_mesh_with_backend_subprocess
+from .subprocess import preprocess_mesh_with_backend_subprocess
 from .errors import QRemeshifyError
 from .libigl_compat import require_igl
 from .mesh_io import (
@@ -747,11 +747,7 @@ def preprocess_mesh_input(
     output_obj_path = workspace_dir / f"{stem}.obj"
 
     symmetry_requested = bool(symmetry_x or symmetry_y or symmetry_z)
-    decimate_requested = (
-        bool(decimate_enabled)
-        or decimate_target_faces > 0
-        or decimate_ratio < 0.999999
-    )
+    decimate_requested = bool(decimate_enabled)
 
     resolved_backend, backend_fallback_used = resolve_preprocess_backend(
         backend,

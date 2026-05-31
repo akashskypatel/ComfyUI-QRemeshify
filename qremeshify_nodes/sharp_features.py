@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .bpy_subprocess import generate_sharp_features_with_backend_subprocess
+from .subprocess import generate_sharp_features_with_backend_subprocess
 from .errors import QRemeshifyError
 from .libigl_compat import require_igl, write_triangle_obj_with_libigl
 from .mesh_io import compute_face_normals, load_triangle_mesh_with_trimesh, write_triangle_obj
