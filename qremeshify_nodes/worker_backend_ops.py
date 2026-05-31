@@ -96,6 +96,132 @@ def write_feature_lines(output_path: Path, feature_lines: list[str]) -> None:
             handle.write(f"{line}\n")
 
 
+def _run_libigl_preprocess_backend(
+    payload: dict,
+    *,
+    QRemeshifyError,
+    _import_repo_module,
+) -> dict:
+    """Run LIBIGL mesh preprocessing in the worker."""
+    import numpy as np
+
+    mesh_path = Path(payload["mesh_path"])
+    output_obj_path = Path(payload["output_obj_path"])
+    decimate_requested = bool(payload.get("decimate_enabled"))
+    igl = _import_repo_module("libigl_compat").require_igl()
+    vertices, faces = igl.read_triangle_mesh(str(mesh_path))
+    vertices = np.asarray(vertices, dtype=np.float64)
+    faces = np.asarray(faces, dtype=np.int64)
+    if vertices.size == 0 or faces.size == 0:
+        raise QRemeshifyError(f"libigl could not load a triangle mesh from: {mesh_path}")
+    edge_result = igl.is_edge_manifold(np.asarray(faces, dtype=np.int64))
+    edge_manifold = bool(edge_result[0] if isinstance(edge_result, tuple) else edge_result)
+    vertex_result = igl.is_vertex_manifold(np.asarray(faces, dtype=np.int64))
+    vertex_manifold = bool(np.all(np.asarray(vertex_result, dtype=bool)))
+    input_stats = mesh_stats_from_arrays(vertices, faces)
+    if decimate_requested:
+        target_faces = resolve_target_faces(
+            len(faces),
+            int(payload.get("decimate_target_faces", 0)),
+            float(payload.get("decimate_ratio", 1.0)),
+        )
+        if not (edge_manifold and vertex_manifold):
+            raise QRemeshifyError(
+                "backend='LIBIGL' decimation requires a manifold triangle mesh. "
+                f"is_edge_manifold={edge_manifold}, is_vertex_manifold={vertex_manifold}"
+            )
+        reached_target, vertices, faces, _, _ = igl.decimate(
+            np.asarray(vertices, dtype=np.float64),
+            np.asarray(faces, dtype=np.int32),
+            int(target_faces),
+        )
+        decimate_reached_target = bool(reached_target)
+    else:
+        target_faces = 0
+        decimate_reached_target = True
+    _import_repo_module("libigl_compat").write_triangle_obj_with_libigl(
+        output_obj_path,
+        vertices,
+        faces,
+    )
+    output_stats = mesh_stats_from_arrays(vertices, faces)
+    return {
+        "output_obj_path": str(output_obj_path),
+        "input_stats": input_stats,
+        "output_stats": output_stats,
+        "decimate_reached_target": bool(decimate_reached_target),
+        "decimate_target_resolved": int(target_faces),
+        "edge_manifold": bool(edge_manifold),
+        "vertex_manifold": bool(vertex_manifold),
+    }
+
+
+def _run_trimesh_preprocess_backend(
+    payload: dict,
+    *,
+    QRemeshifyError,
+    _import_repo_module,
+) -> dict:
+    """Run TRIMESH mesh preprocessing in the worker."""
+    import numpy as np
+
+    mesh_path = Path(payload["mesh_path"])
+    output_obj_path = Path(payload["output_obj_path"])
+    decimate_requested = bool(payload.get("decimate_enabled"))
+    mesh_io = _import_repo_module("mesh_io")
+    try:
+        import trimesh
+    except ImportError as exc:  # pragma: no cover
+        raise QRemeshifyError(
+            "backend='TRIMESH' requires the 'trimesh' Python package to be installed"
+        ) from exc
+
+    vertices, faces = mesh_io.load_triangle_mesh_with_trimesh(mesh_path)
+    input_stats = mesh_stats_from_arrays(vertices, faces)
+    if decimate_requested:
+        target_faces = resolve_target_faces(
+            len(faces),
+            int(payload.get("decimate_target_faces", 0)),
+            float(payload.get("decimate_ratio", 1.0)),
+        )
+        if target_faces < len(faces):
+            mesh = trimesh.Trimesh(
+                vertices=np.asarray(vertices, dtype=np.float64),
+                faces=np.asarray(faces, dtype=np.int64),
+                process=False,
+            )
+            try:
+                simplified = mesh.simplify_quadric_decimation(
+                    face_count=int(target_faces)
+                )
+            except BaseException as exc:  # pragma: no cover
+                raise QRemeshifyError(
+                    "TRIMESH decimation failed. Install trimesh's quadric decimation dependency "
+                    "with `pip install fast-simplification` in the active ComfyUI environment."
+                ) from exc
+            vertices = np.asarray(simplified.vertices, dtype=np.float64)
+            faces = np.asarray(simplified.faces, dtype=np.int64)
+        decimate_reached_target = len(faces) <= target_faces
+    else:
+        target_faces = 0
+        decimate_reached_target = True
+    mesh_io.write_triangle_obj(output_obj_path, vertices, faces)
+    output_stats = mesh_stats_from_arrays(vertices, faces)
+    return {
+        "output_obj_path": str(output_obj_path),
+        "input_stats": input_stats,
+        "output_stats": output_stats,
+        "decimate_reached_target": bool(decimate_reached_target),
+        "decimate_target_resolved": int(target_faces),
+    }
+
+
+PREPROCESS_BACKEND_HANDLERS = {
+    "LIBIGL": _run_libigl_preprocess_backend,
+    "TRIMESH": _run_trimesh_preprocess_backend,
+}
+
+
 def run_backend_preprocess(
     payload: dict,
     *,
@@ -103,110 +229,110 @@ def run_backend_preprocess(
     _import_repo_module,
 ) -> dict:
     """Run LIBIGL or TRIMESH mesh preprocessing in the worker."""
+    backend = payload["backend"]
+    handler = PREPROCESS_BACKEND_HANDLERS.get(backend)
+    if handler is None:
+        raise QRemeshifyError(f"Unsupported preprocessing backend: {backend}")
+    return handler(
+        payload,
+        QRemeshifyError=QRemeshifyError,
+        _import_repo_module=_import_repo_module,
+    )
+
+
+def _run_libigl_sharp_generation_backend(
+    payload: dict,
+    *,
+    QRemeshifyError,
+    _import_repo_module,
+) -> dict:
+    """Run LIBIGL sharp-feature generation in the worker."""
     import numpy as np
 
-    backend = payload["backend"]
     mesh_path = Path(payload["mesh_path"])
-    output_obj_path = Path(payload["output_obj_path"])
-    decimate_requested = bool(payload.get("decimate_enabled"))
-
+    normalized_obj_path = Path(payload["normalized_obj_path"])
+    output_path = Path(payload["output_path"])
+    sharp_angle = float(payload["sharp_angle"])
     mesh_io = _import_repo_module("mesh_io")
-    if backend == "LIBIGL":
-        igl = _import_repo_module("libigl_compat").require_igl()
-        vertices, faces = igl.read_triangle_mesh(str(mesh_path))
-        vertices = np.asarray(vertices, dtype=np.float64)
-        faces = np.asarray(faces, dtype=np.int64)
-        if vertices.size == 0 or faces.size == 0:
-            raise QRemeshifyError(f"libigl could not load a triangle mesh from: {mesh_path}")
-        edge_result = igl.is_edge_manifold(np.asarray(faces, dtype=np.int64))
-        edge_manifold = bool(edge_result[0] if isinstance(edge_result, tuple) else edge_result)
-        vertex_result = igl.is_vertex_manifold(np.asarray(faces, dtype=np.int64))
-        vertex_manifold = bool(np.all(np.asarray(vertex_result, dtype=bool)))
-        input_stats = mesh_stats_from_arrays(vertices, faces)
-        if decimate_requested:
-            target_faces = resolve_target_faces(
-                len(faces),
-                int(payload.get("decimate_target_faces", 0)),
-                float(payload.get("decimate_ratio", 1.0)),
-            )
-            if not (edge_manifold and vertex_manifold):
-                raise QRemeshifyError(
-                    "backend='LIBIGL' decimation requires a manifold triangle mesh. "
-                    f"is_edge_manifold={edge_manifold}, is_vertex_manifold={vertex_manifold}"
-                )
-            reached_target, vertices, faces, _, _ = igl.decimate(
-                np.asarray(vertices, dtype=np.float64),
-                np.asarray(faces, dtype=np.int32),
-                int(target_faces),
-            )
-            decimate_reached_target = bool(reached_target)
-        else:
-            target_faces = 0
-            decimate_reached_target = True
-        _import_repo_module("libigl_compat").write_triangle_obj_with_libigl(
-            output_obj_path,
-            vertices,
-            faces,
+    igl = _import_repo_module("libigl_compat").require_igl()
+    if not hasattr(igl, "sharp_edges"):
+        raise QRemeshifyError(
+            "sharp_backend='LIBIGL' requires an installed libigl build that exposes igl.sharp_edges"
         )
-        output_stats = mesh_stats_from_arrays(vertices, faces)
-        return {
-            "output_obj_path": str(output_obj_path),
-            "input_stats": input_stats,
-            "output_stats": output_stats,
-            "decimate_reached_target": bool(decimate_reached_target),
-            "decimate_target_resolved": int(target_faces),
-            "edge_manifold": bool(edge_manifold),
-            "vertex_manifold": bool(vertex_manifold),
-        }
+    vertices, faces = igl.read_triangle_mesh(str(mesh_path))
+    vertices = np.asarray(vertices, dtype=np.float64)
+    faces = np.asarray(faces, dtype=np.int64)
+    _import_repo_module("libigl_compat").write_triangle_obj_with_libigl(
+        normalized_obj_path,
+        vertices,
+        faces,
+    )
+    sharp_result = igl.sharp_edges(vertices, faces, np.pi * (sharp_angle / 180.0))
+    _, _, unique_edges, _, _, sharp_indices = sharp_result
+    unique_edges = np.asarray(unique_edges, dtype=np.int64)
+    sharp_indices = set(np.asarray(sharp_indices, dtype=np.int64).tolist())
+    sharp_edge_keys = {
+        tuple(sorted((int(unique_edge[0]), int(unique_edge[1]))))
+        for unique_index, unique_edge in enumerate(unique_edges)
+        if unique_index in sharp_indices
+    }
+    face_normals = mesh_io.compute_face_normals(vertices, faces)
+    write_feature_lines(
+        output_path,
+        collect_feature_lines(vertices, faces, sharp_edge_keys, face_normals),
+    )
+    return {
+        "normalized_obj_path": str(normalized_obj_path),
+        "output_path": str(output_path),
+    }
 
-    if backend == "TRIMESH":
-        try:
-            import trimesh
-        except ImportError as exc:  # pragma: no cover
-            raise QRemeshifyError(
-                "backend='TRIMESH' requires the 'trimesh' Python package to be installed"
-            ) from exc
 
-        vertices, faces = mesh_io.load_triangle_mesh_with_trimesh(mesh_path)
-        input_stats = mesh_stats_from_arrays(vertices, faces)
-        if decimate_requested:
-            target_faces = resolve_target_faces(
-                len(faces),
-                int(payload.get("decimate_target_faces", 0)),
-                float(payload.get("decimate_ratio", 1.0)),
-            )
-            if target_faces < len(faces):
-                mesh = trimesh.Trimesh(
-                    vertices=np.asarray(vertices, dtype=np.float64),
-                    faces=np.asarray(faces, dtype=np.int64),
-                    process=False,
-                )
-                try:
-                    simplified = mesh.simplify_quadric_decimation(
-                        face_count=int(target_faces)
-                    )
-                except BaseException as exc:  # pragma: no cover
-                    raise QRemeshifyError(
-                        "TRIMESH decimation failed. Install trimesh's quadric decimation dependency "
-                        "with `pip install fast-simplification` in the active ComfyUI environment."
-                    ) from exc
-                vertices = np.asarray(simplified.vertices, dtype=np.float64)
-                faces = np.asarray(simplified.faces, dtype=np.int64)
-            decimate_reached_target = len(faces) <= target_faces
-        else:
-            target_faces = 0
-            decimate_reached_target = True
-        mesh_io.write_triangle_obj(output_obj_path, vertices, faces)
-        output_stats = mesh_stats_from_arrays(vertices, faces)
-        return {
-            "output_obj_path": str(output_obj_path),
-            "input_stats": input_stats,
-            "output_stats": output_stats,
-            "decimate_reached_target": bool(decimate_reached_target),
-            "decimate_target_resolved": int(target_faces),
-        }
+def _run_trimesh_sharp_generation_backend(
+    payload: dict,
+    *,
+    QRemeshifyError,
+    _import_repo_module,
+) -> dict:
+    """Run TRIMESH sharp-feature generation in the worker."""
+    import numpy as np
 
-    raise QRemeshifyError(f"Unsupported preprocessing backend: {backend}")
+    mesh_path = Path(payload["mesh_path"])
+    normalized_obj_path = Path(payload["normalized_obj_path"])
+    output_path = Path(payload["output_path"])
+    sharp_angle = float(payload["sharp_angle"])
+    mesh_io = _import_repo_module("mesh_io")
+    try:
+        import trimesh
+    except ImportError as exc:  # pragma: no cover
+        raise QRemeshifyError(
+            "backend='TRIMESH' requires the 'trimesh' Python package to be installed"
+        ) from exc
+    vertices, faces = mesh_io.load_triangle_mesh_with_trimesh(mesh_path)
+    mesh_io.write_triangle_obj(normalized_obj_path, vertices, faces)
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+    adjacency_edges = np.asarray(mesh.face_adjacency_edges, dtype=np.int64)
+    adjacency_angles = np.asarray(mesh.face_adjacency_angles, dtype=np.float64)
+    sharp_threshold = np.pi * (sharp_angle / 180.0)
+    sharp_edge_keys = {
+        tuple(sorted((int(edge[0]), int(edge[1]))))
+        for edge, angle in zip(adjacency_edges, adjacency_angles)
+        if angle >= sharp_threshold
+    }
+    face_normals = mesh_io.compute_face_normals(vertices, faces)
+    write_feature_lines(
+        output_path,
+        collect_feature_lines(vertices, faces, sharp_edge_keys, face_normals),
+    )
+    return {
+        "normalized_obj_path": str(normalized_obj_path),
+        "output_path": str(output_path),
+    }
+
+
+SHARP_BACKEND_HANDLERS = {
+    "LIBIGL": _run_libigl_sharp_generation_backend,
+    "TRIMESH": _run_trimesh_sharp_generation_backend,
+}
 
 
 def run_backend_sharp_generation(
@@ -216,77 +342,15 @@ def run_backend_sharp_generation(
     _import_repo_module,
 ) -> dict:
     """Run LIBIGL or TRIMESH sharp-feature generation in the worker."""
-    import numpy as np
-
     backend = payload["backend"]
-    mesh_path = Path(payload["mesh_path"])
-    normalized_obj_path = Path(payload["normalized_obj_path"])
-    output_path = Path(payload["output_path"])
-    sharp_angle = float(payload["sharp_angle"])
-    mesh_io = _import_repo_module("mesh_io")
-
-    if backend == "LIBIGL":
-        igl = _import_repo_module("libigl_compat").require_igl()
-        if not hasattr(igl, "sharp_edges"):
-            raise QRemeshifyError(
-                "sharp_backend='LIBIGL' requires an installed libigl build that exposes igl.sharp_edges"
-            )
-        vertices, faces = igl.read_triangle_mesh(str(mesh_path))
-        vertices = np.asarray(vertices, dtype=np.float64)
-        faces = np.asarray(faces, dtype=np.int64)
-        _import_repo_module("libigl_compat").write_triangle_obj_with_libigl(
-            normalized_obj_path,
-            vertices,
-            faces,
-        )
-        sharp_result = igl.sharp_edges(vertices, faces, np.pi * (sharp_angle / 180.0))
-        _, _, unique_edges, _, _, sharp_indices = sharp_result
-        unique_edges = np.asarray(unique_edges, dtype=np.int64)
-        sharp_indices = set(np.asarray(sharp_indices, dtype=np.int64).tolist())
-        sharp_edge_keys = {
-            tuple(sorted((int(unique_edge[0]), int(unique_edge[1]))))
-            for unique_index, unique_edge in enumerate(unique_edges)
-            if unique_index in sharp_indices
-        }
-        face_normals = mesh_io.compute_face_normals(vertices, faces)
-        write_feature_lines(
-            output_path,
-            collect_feature_lines(vertices, faces, sharp_edge_keys, face_normals),
-        )
-        return {
-            "normalized_obj_path": str(normalized_obj_path),
-            "output_path": str(output_path),
-        }
-
-    if backend == "TRIMESH":
-        try:
-            import trimesh
-        except ImportError as exc:  # pragma: no cover
-            raise QRemeshifyError(
-                "backend='TRIMESH' requires the 'trimesh' Python package to be installed"
-            ) from exc
-        vertices, faces = mesh_io.load_triangle_mesh_with_trimesh(mesh_path)
-        mesh_io.write_triangle_obj(normalized_obj_path, vertices, faces)
-        mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
-        adjacency_edges = np.asarray(mesh.face_adjacency_edges, dtype=np.int64)
-        adjacency_angles = np.asarray(mesh.face_adjacency_angles, dtype=np.float64)
-        sharp_threshold = np.pi * (sharp_angle / 180.0)
-        sharp_edge_keys = {
-            tuple(sorted((int(edge[0]), int(edge[1]))))
-            for edge, angle in zip(adjacency_edges, adjacency_angles)
-            if angle >= sharp_threshold
-        }
-        face_normals = mesh_io.compute_face_normals(vertices, faces)
-        write_feature_lines(
-            output_path,
-            collect_feature_lines(vertices, faces, sharp_edge_keys, face_normals),
-        )
-        return {
-            "normalized_obj_path": str(normalized_obj_path),
-            "output_path": str(output_path),
-        }
-
-    raise QRemeshifyError(f"Unsupported sharp feature backend: {backend}")
+    handler = SHARP_BACKEND_HANDLERS.get(backend)
+    if handler is None:
+        raise QRemeshifyError(f"Unsupported sharp feature backend: {backend}")
+    return handler(
+        payload,
+        QRemeshifyError=QRemeshifyError,
+        _import_repo_module=_import_repo_module,
+    )
 
 
 def run_qremeshify_backend(
