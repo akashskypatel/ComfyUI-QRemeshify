@@ -30,6 +30,16 @@
 ## Documentation
 - [ ] Add a troubleshooting section for `bpy`, DLL loading, and backend failures.
 
+## Refactoring
+- [ ] Split `qremeshify_nodes/bpy_subprocess.py` into smaller modules: subprocess transport, BPY mesh worker utilities, non-BPY backend workers, and dispatch/registration.
+- [ ] Remove duplicated BPY import/build/symmetry/OBJ export logic between `qremeshify_nodes/blender_backend.py` and `qremeshify_nodes/bpy_subprocess.py` by consolidating around one shared implementation.
+- [ ] Break `preprocess_mesh_input(...)` in `qremeshify_nodes/preprocess_helpers.py` into smaller orchestration helpers for backend resolution, worker execution, sharp-backend resolution, metadata assembly, and output packaging.
+- [ ] Extract backend-agnostic sharp-feature serialization so `LIBIGL` and `TRIMESH` worker paths stop duplicating edge-occurrence and convexity logic.
+- [ ] Refactor `QRemeshifyOBJ.execute(...)` in `qremeshify_nodes/node_remesh.py` into smaller steps for input materialization, guard enforcement, sharp-input preparation, backend request creation, and output packaging.
+- [ ] Split `qremeshify_nodes/backend.py` into native library loading, output-path derivation, and QuadWild parameter-building helpers.
+- [ ] Split `qremeshify_nodes/artifacts.py` into data models, materialization helpers, and payload parsing helpers.
+- [ ] Add shared schema/input builders for repeated node UI patterns like mesh-source selection and backend-selection inputs.
+
 ## Future Backlog
 - [ ] Add progress-percentage reporting to all nodes that can expose meaningful runtime progress.
 - [ ] Expose additional native methods from `third_party/quadwild` through the Python wrapper for better preprocessing, diagnostics, and future guard rails.
