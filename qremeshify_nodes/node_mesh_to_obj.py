@@ -26,9 +26,10 @@ class QRemeshifyMeshToOBJ(IO.ComfyNode):
                         "input_mesh",
                         options=["none"] + sorted(list_input_3d_files(SUPPORTED_3D_SUFFIXES)),
                         upload=IO.UploadType.model,
-                        tooltip="Select a mesh file to convert",
+                        tooltip="Select a mesh file to convert to OBJ",
                     ),
-                    [IO.File3DAny, IO.Mesh],
+                    types=[IO.File3DAny, IO.Mesh],
+                    tooltip="3D model path, uploaded file, or mesh input",
                 ),
                 IO.Combo.Input(
                     "backend",

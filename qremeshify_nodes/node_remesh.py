@@ -15,12 +15,9 @@ from .artifacts import (
     resolve_sharp_input,
 )
 from .backend_subprocess import run_qremeshify_backend_subprocess
+from .load_3d_input import SUPPORTED_3D_SUFFIXES, list_input_3d_files, resolve_model_path_or_selected
 from .constants import NODE_CATEGORY
 from .errors import QRemeshifyError
-from .load_3d_input import (
-    list_input_3d_files,
-    resolve_model_path_or_selected,
-)
 from .mesh_io import parse_float_list, prepare_output_workspace, prepare_workspace
 
 DEFAULT_HIGH_POLY_FACE_LIMIT = 150000
@@ -284,11 +281,15 @@ class QRemeshifyOBJ(IO.ComfyNode):
             "If the remeshing fails, try reducing the target face count or simplifying the mesh first. "
             "Supplying sharp features is not required but can help preserve important details during remeshing.",
             inputs=[
-                IO.Combo.Input(
-                    "input_obj",
-                    options=["none"] + sorted(list_input_3d_files({".obj"})),
-                    upload=IO.UploadType.model,
-                    tooltip="Select an OBJ file to remesh",
+                IO.MultiType.Input(
+                    IO.Combo.Input(
+                        "input_obj",
+                        options=["none"] + sorted(list_input_3d_files(SUPPORTED_3D_SUFFIXES)),
+                        upload=IO.UploadType.model,
+                        tooltip="Select an OBJ file to remesh",
+                    ),
+                    types=[IO.File3DOBJ],
+                    tooltip="OBJ path or uploaded OBJ file to remesh",
                 ),
                 IO.Boolean.Input("smooth", default=True, tooltip="Apply smoothing to the mesh"),
                 IO.Float.Input(

@@ -29,7 +29,8 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
                         upload=IO.UploadType.model,
                         tooltip="Select a mesh file to preprocess",
                     ),
-                    [IO.File3DAny, IO.Mesh],
+                    types=[IO.File3DAny, IO.Mesh],
+                    tooltip="3D model path, uploaded file, or mesh input",
                 ),
                 IO.Combo.Input(
                     "backend",
