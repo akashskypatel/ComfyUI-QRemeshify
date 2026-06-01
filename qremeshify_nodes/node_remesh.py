@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import comfy.utils
 from comfy_api.latest import IO, Types
 
 from .artifacts import (
@@ -167,6 +168,7 @@ def run_remesh_backend(
     satsuma_config: str,
     time_limits: list[float],
     gap_limits: list[float],
+    progress_node_id: str | None = None,
 ) -> dict:
     """Run the isolated native backend subprocess."""
     return run_qremeshify_backend_subprocess(
@@ -197,6 +199,7 @@ def run_remesh_backend(
         satsuma_config=satsuma_config,
         callback_time_limit=time_limits,
         callback_gap_limit=gap_limits,
+        progress_node_id=progress_node_id,
     )
 
 
@@ -384,6 +387,7 @@ class QRemeshifyOBJ(IO.ComfyNode):
                 ),
                 IO.String.Input("output_dir", default="", tooltip="Output directory"),
             ],
+            hidden=[IO.Hidden.unique_id],
             outputs=[
                 IO.String.Output(display_name=   "output_obj", tooltip="Output OBJ file path"),
                 IO.String.Output(display_name=   "workspace_dir", tooltip="Workspace directory path"),
@@ -433,6 +437,9 @@ class QRemeshifyOBJ(IO.ComfyNode):
         output_dir="",
         **kwargs,
     ) -> IO.NodeOutput:
+        progress_node_id = cls.hidden.unique_id if cls.hidden else None
+        if progress_node_id:
+            comfy.utils.ProgressBar(100, node_id=progress_node_id).update_absolute(0, total=100)
         input_obj = normalize_selected_input_obj(input_obj)
         resolved_input_obj = resolve_mesh_input(input_obj, mesh_artifact)
         resolved_sharp_path = resolve_sharp_input(sharp_features_path, sharp_artifact)
@@ -487,6 +494,7 @@ class QRemeshifyOBJ(IO.ComfyNode):
             satsuma_config=satsuma_config,
             time_limits=time_limits,
             gap_limits=gap_limits,
+            progress_node_id=progress_node_id,
         )
         return build_remesh_outputs(
             result=result,

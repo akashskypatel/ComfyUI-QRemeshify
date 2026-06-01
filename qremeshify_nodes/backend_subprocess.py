@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import importlib
+import re
 import types
 import subprocess
 import sys
 import tempfile
+import threading
 from functools import lru_cache
 from pathlib import Path
 
@@ -42,11 +44,99 @@ def _import_repo_module(module_name: str):
     return importlib.import_module(f"qremeshify_nodes.{module_name}")
 
 
-def _run_subprocess(payload: dict) -> dict:
+def _create_qremeshify_progress_callbacks(node_id: str | None):
+    """Create a best-effort QuadWild stdout progress parser."""
+    if not node_id:
+        return None
+
+    try:
+        import comfy.utils
+    except Exception:
+        return None
+
+    progress = comfy.utils.ProgressBar(100, node_id=node_id)
+    state = {
+        "current": 0.0,
+        "initial_unsolved": None,
+        "bimdf_solves": 0,
+    }
+
+    def _advance(value: float) -> None:
+        value = max(state["current"], min(100.0, float(value)))
+        if value > state["current"]:
+            state["current"] = value
+            progress.update_absolute(value, total=100)
+
+    def _on_stdout(line: str) -> None:
+        text = line.strip()
+        if not text:
+            return
+
+        if "Loading Sharp Features" in text:
+            _advance(5)
+        elif "Before Remeshing - faces:" in text:
+            _advance(10)
+        elif "[fieldComputation]" in text:
+            _advance(20)
+        elif "..Update Features.." in text:
+            _advance(30)
+        elif "Loading Remeshed M:" in text:
+            _advance(35)
+        elif "**** FIRST TRACING STEP ****" in text:
+            _advance(40)
+        elif "**** SUBPATCH TRACING - THERE ARE " in text:
+            match = re.search(r"THERE ARE\s+(\d+)\s+Unsolved Partitions", text)
+            if match:
+                unsolved = int(match.group(1))
+                initial_unsolved = state["initial_unsolved"]
+                if initial_unsolved is None and unsolved > 0:
+                    state["initial_unsolved"] = unsolved
+                    _advance(45)
+                elif initial_unsolved:
+                    solved_ratio = max(
+                        0.0,
+                        min(1.0, (initial_unsolved - unsolved) / initial_unsolved),
+                    )
+                    _advance(45 + (25 * solved_ratio))
+                elif unsolved == 0:
+                    _advance(70)
+        elif "**** FINAL REMOVAL ****" in text:
+            _advance(75)
+        elif "**** FINAL THERE ARE " in text or "**** TOTAL " in text:
+            _advance(80)
+        elif "Bi-MDF setup." in text:
+            _advance(85)
+        elif "flow problem setup complete, solving..." in text:
+            _advance(88)
+        elif "Solved BiMDF" in text:
+            state["bimdf_solves"] += 1
+            _advance(92 if state["bimdf_solves"] == 1 else 96)
+        elif "flow round one finished." in text or "quantisation evaluation results:" in text:
+            _advance(95)
+        elif "** SMOOTHING **" in text:
+            _advance(98)
+        elif "*** Done ***" in text or "MESH NAME " in text:
+            _advance(99)
+
+    def _finish() -> None:
+        _advance(100)
+
+    return _on_stdout, _finish
+
+
+def _create_progress_callbacks(payload: dict, node_id: str | None):
+    """Create optional progress callbacks for supported subprocess operations."""
+    if payload.get("operation") == "run_qremeshify_backend":
+        return _create_qremeshify_progress_callbacks(node_id)
+    return None
+
+
+def _run_subprocess(payload: dict, *, progress_node_id: str | None = None) -> dict:
     """Run backend operation in a separate Python process.
     
     Args:
         payload: Dictionary containing operation and parameters
+        progress_node_id: Optional ComfyUI node id for progress reporting
         
     Returns:
         Dictionary with operation result
@@ -57,18 +147,51 @@ def _run_subprocess(payload: dict) -> dict:
         json.dump(payload, handle)
         payload_path = Path(handle.name)
 
+    progress_callbacks = _create_progress_callbacks(payload, progress_node_id)
+    progress_stdout = progress_callbacks[0] if progress_callbacks else None
+    progress_finish = progress_callbacks[1] if progress_callbacks else None
+
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             [sys.executable, str(_worker_file()), str(payload_path)],
-            capture_output=True,
             text=True,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
+
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
+
+        def _pump_stream(stream, sink: list[str], label: str) -> None:
+            try:
+                for line in iter(stream.readline, ""):
+                    sink.append(line)
+                    print(f"[qremeshify:{label}] {line}", end="", flush=True)
+                    if label == "stdout" and progress_stdout is not None:
+                        progress_stdout(line)
+            finally:
+                stream.close()
+
+        stdout_thread = threading.Thread(
+            target=_pump_stream,
+            args=(process.stdout, stdout_lines, "stdout"),
+            daemon=True,
+        )
+        stderr_thread = threading.Thread(
+            target=_pump_stream,
+            args=(process.stderr, stderr_lines, "stderr"),
+            daemon=True,
+        )
+        stdout_thread.start()
+        stderr_thread.start()
+        returncode = process.wait()
+        stdout_thread.join()
+        stderr_thread.join()
     finally:
         payload_path.unlink(missing_ok=True)
 
-    stdout = (completed.stdout or "").strip()
-    stderr = (completed.stderr or "").strip()
+    stdout = "".join(stdout_lines).strip()
+    stderr = "".join(stderr_lines).strip()
     response = None
     if stdout:
         for line in reversed(stdout.splitlines()):
@@ -81,14 +204,14 @@ def _run_subprocess(payload: dict) -> dict:
             except json.JSONDecodeError:
                 continue
 
-    if completed.returncode != 0:
+    if returncode != 0:
         error_message = None
         if isinstance(response, dict):
             error_message = response.get("error")
         if not error_message:
             error_message = stderr or stdout or "backend subprocess exited without output"
         raise QRemeshifyError(
-            f"backend subprocess failed with exit code {completed.returncode}: {error_message}"
+            f"backend subprocess failed with exit code {returncode}: {error_message}"
         )
 
     if not isinstance(response, dict):
@@ -97,6 +220,8 @@ def _run_subprocess(payload: dict) -> dict:
         )
     if response.get("status") != "ok":
         raise QRemeshifyError(response.get("error", "backend subprocess returned an error"))
+    if progress_finish is not None:
+        progress_finish()
     return response
 
 
@@ -345,6 +470,7 @@ def run_qremeshify_backend_subprocess(
     satsuma_config: str,
     callback_time_limit: list[float],
     callback_gap_limit: list[float],
+    progress_node_id: str | None = None,
 ) -> dict:
     """Run the native QRemeshify backend in an isolated subprocess."""
     return _run_subprocess(
@@ -385,7 +511,8 @@ def run_qremeshify_backend_subprocess(
             "satsuma_config": satsuma_config,
             "callback_time_limit": list(callback_time_limit),
             "callback_gap_limit": list(callback_gap_limit),
-        }
+        },
+        progress_node_id=progress_node_id,
     )
 
 
