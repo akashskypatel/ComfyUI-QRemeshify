@@ -49,7 +49,7 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
                 IO.Boolean.Input("merge_duplicate_vertices", default=False, tooltip="Merge near-duplicate vertices before preprocessing"),
                 IO.Boolean.Input("fill_holes", default=False, tooltip="Fill mesh holes using the TRIMESH repair path; requires TRIMESH backend or backend fallback"),
                 IO.Boolean.Input("allow_backend_fallback", default=False, tooltip="Allow backend fallback"),
-                IO.Boolean.Input("generate_sharp", default=False, tooltip="Generate sharp features"),
+                IO.Boolean.Input("generate_sharp", default=True, tooltip="Generate sharp features"),
                 IO.Float.Input("sharp_angle", default=35.0, min=0.0, max=180.0, step=0.1, tooltip="Sharp angle threshold (0.0-180.0)"),
                 IO.Combo.Input(
                     "sharp_backend",
@@ -88,7 +88,7 @@ class QRemeshifyPreprocessMesh(IO.ComfyNode):
         merge_duplicate_vertices=False,
         fill_holes=False,
         allow_backend_fallback=False,
-        generate_sharp=False,
+        generate_sharp=True,
         sharp_angle=35.0,
         sharp_backend="BPY", # "AUTO",
         output_dir="",

@@ -104,9 +104,33 @@ class Example(io.ComfyNode):
         This method is used in the core repo for the LoadImage node where they return the image hash as a string, if the image hash
         changes between executions the LoadImage node is executed again.
     """
-    # @classmethod
-    # def fingerprint_inputs(s, image, string_field, int_field, float_field, print_to_screen):
-    #    return ""
+    @classmethod
+    def fingerprint_inputs(s, image, string_field, int_field, float_field, print_to_screen):
+       return ""
+
+    @classmethod
+    def validate_inputs(cls, **kwargs) -> bool | str:
+        """Optionally, define this function to validate inputs; equivalent to V1's VALIDATE_INPUTS.
+
+        If the function returns a string, it will be used as the validation error message for the node.
+        """
+        raise NotImplementedError
+
+     @classmethod
+    def check_lazy_status(cls, **kwargs) -> list[str]:
+        """Optionally, define this function to return a list of input names that should be evaluated.
+
+        This basic mixin impl. requires all inputs.
+
+        :kwargs: All node inputs will be included here.  If the input is ``None``, it should be assumed that it has not yet been evaluated.  \
+            When using ``INPUT_IS_LIST = True``, unevaluated will instead be ``(None,)``.
+
+        Params should match the nodes execution ``FUNCTION`` (self, and all inputs by name).
+        Will be executed repeatedly until it returns an empty list, or all requested items were already evaluated (and sent as params).
+
+        Comfy Docs: https://docs.comfy.org/custom-nodes/backend/lazy_evaluation#defining-check-lazy-status
+        """
+        return [name for name in kwargs if kwargs[name] is None]
 
 
 # Set the web directory, any .js file in that directory will be loaded by the frontend as a frontend extension
